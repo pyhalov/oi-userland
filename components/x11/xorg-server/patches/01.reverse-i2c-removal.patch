@@ -1,0 +1,3689 @@
+reverted:
+From 83701c4ee8f79f69f4286ef262cd3ae3922629b9 Mon Sep 17 00:00:00 2001
+From: Adam Jackson <ajax@redhat.com>
+Date: Mon, 21 Jul 2014 10:21:07 -0400
+Subject: xfree86: Remove i2c multimedia modules
+
+These came in with the GATOS merge I think.  The only driver using them
+was radeon, and then only in UMS mode.  The radeon driver dropped UMS
+support from the main branch about two years ago, the UMS branch hasn't
+been touched in about fifteen months, and does not build against 1.16 in
+any case, so this is all dead code.
+
+Signed-off-by: Adam Jackson <ajax@redhat.com>
+Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+Reviewed-by: Daniel Stone <daniels@collabora.com>
+Signed-off-by: Keith Packard <keithp@keithp.com>
+
+As we use old radeon
+--- b/hw/xfree86/i2c/Makefile.am
++++ a/hw/xfree86/i2c/Makefile.am
+@@ -1,9 +1,43 @@
+ noinst_LTLIBRARIES = libi2c.la
+ 
++multimediadir = $(moduledir)/multimedia
++multimedia_LTLIBRARIES =	\
++	bt829_drv.la		\
++	fi1236_drv.la		\
++	msp3430_drv.la		\
++	tda8425_drv.la		\
++	tda9850_drv.la		\
++	tda9885_drv.la		\
++	uda1380_drv.la
++
+ libi2c_la_SOURCES = xf86i2c.c
+ 
+ AM_CPPFLAGS = $(XORG_INCS)
+ 
+ AM_CFLAGS = $(DIX_CFLAGS) $(XORG_CFLAGS)
+ 
++sdk_HEADERS = xf86i2c.h bt829.h fi1236.h msp3430.h tda8425.h tda9850.h tda9885.h uda1380.h i2c_def.h
++
++#
++# i2c drivers
++#
++bt829_drv_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
++bt829_drv_la_SOURCES = bt829.c bt829.h bt829_module.c
++
++fi1236_drv_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
++fi1236_drv_la_SOURCES = fi1236.c fi1236.h fi1236_module.c tda9885.c
++
++msp3430_drv_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
++msp3430_drv_la_SOURCES = msp3430.c msp3430.h msp3430_module.c
++
++tda8425_drv_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
++tda8425_drv_la_SOURCES = tda8425.c tda8425.h tda8425_module.c
++
++tda9850_drv_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
++tda9850_drv_la_SOURCES = tda9850.c tda9850.h tda9850_module.c
++
++tda9885_drv_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
++tda9885_drv_la_SOURCES = tda9885.c tda9885.h tda9885_module.c
++
++uda1380_drv_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
++uda1380_drv_la_SOURCES = uda1380.c uda1380.h uda1380_module.c
+-sdk_HEADERS = xf86i2c.h i2c_def.h
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/bt829.c
+@@ -0,0 +1,822 @@
++/* TODO: clean up/fix CC code */
++
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include <stdlib.h>
++#include <string.h>
++#include <stdio.h>
++
++#include "xf86.h"
++#include "xf86i2c.h"
++#include "bt829.h"
++#include "i2c_def.h"
++
++/* Changing the following settings (especially VCROP) may */
++/* require modifying code that calls this driver.         */
++#define HCROP	0               /* amount to crop from the left and right edges */
++#define VCROP	0               /* amount to crop from the top and bottom edges */
++
++#define BTVERSION	(bt->id>>4)
++
++#define H(X)		( ((X)>>8) & 0xFF )
++#define L(X)		( (X) & 0xFF )
++
++#define LIMIT(X,A,B)	(((X)<(A)) ? (A) : ((X)>(B)) ? (B) : (X) )
++
++/* Bt829 family chip ID's */
++#define BT815	0x02
++#define BT817	0x06
++#define BT819	0x07
++#define BT827	0x0C
++#define BT829	0x0E
++
++/* Bt829 registers */
++#define STATUS		0x00    /* Device Status */
++#define IFORM		0x01    /* Input Format */
++#define TDEC		0x02    /* Temporal Decimation */
++#define CROP		0x03    /* MSB Cropping */
++#define VDELAY_LO	0x04    /* Vertical Delay */
++#define VACTIVE_LO	0x05    /* Vertical Active */
++#define HDELAY_LO	0x06    /* Horizontal Delay */
++#define HACTIVE_LO	0x07    /* Horizontal Active */
++#define HSCALE_HI	0x08    /* Horizontal Scaling */
++#define HSCALE_LO	0x09    /* Horizontal Scaling */
++#define BRIGHT		0x0A    /* Brightness Control */
++#define CONTROL		0x0B    /* Miscellaneous Control */
++#define CONTRAST_LO	0x0C    /* Luma Gain (Contrast) */
++#define SAT_U_LO	0x0D    /* Chroma (U) Gain (Saturation) */
++#define SAT_V_LO	0x0E    /* Chroma (V) Gain (Saturation) */
++#define HUE		0x0F    /* Hue Control */
++#define SCLOOP		0x10    /* SC Loop Control */
++#define WC_UP		0x11    /* White Crush Up Count */
++#define OFORM		0x12    /* Output Format */
++#define VSCALE_HI	0x13    /* Vertical Scaling */
++#define VSCALE_LO	0x14    /* Vertical Scaling */
++#define TEST		0x15    /* Test Control */
++#define VPOLE		0x16    /* Video Timing Polarity */
++#define IDCODE		0x17    /* ID Code */
++#define ADELAY		0x18    /* AGC Delay */
++#define BDELAY		0x19    /* Burst Gate Delay */
++#define ADC		0x1A    /* ADC Interface */
++#define VTC		0x1B    /* Video Timing Control */
++#define CC_STATUS	0x1C    /* Extended Data Services/Closed Capt Status */
++#define CC_DATA		0x1D    /* Extended Data Services/Closed Capt Data */
++#define WC_DN		0x1E    /* White Crush Down Count */
++#define SRESET		0x1F    /* Software Reset */
++#define P_IO		0x3F    /* Programmable I/O */
++
++static CARD8
++btread(BT829Ptr bt, CARD8 reg)
++{
++    CARD8 v;
++
++    I2C_WriteRead(&(bt->d), &reg, 1, &v, 1);
++
++    return v;
++}
++
++static void
++btwrite(BT829Ptr bt, CARD8 reg, CARD8 val)
++{
++    CARD8 data[2];
++
++    data[0] = reg;
++    data[1] = val;
++    I2C_WriteRead(&(bt->d), data, 2, NULL, 0);
++}
++
++/*
++ * Register access
++ */
++static void
++btwrite_status(BT829Ptr bt)
++{                               /* STATUS */
++    btwrite(bt, STATUS, 0x00);  /* clear */
++}
++
++static void
++btwrite_iform(BT829Ptr bt)
++{                               /* IFORM */
++    int xtsel;
++
++    switch (bt->format) {
++    case BT829_NTSC:
++    case BT829_NTSC_JAPAN:
++    case BT829_PAL_M:
++    case BT829_PAL_N_COMB:     /* gatos says xtsel = 2 */
++        xtsel = 1;
++        break;
++    case BT829_PAL:
++    case BT829_PAL_N:
++    case BT829_SECAM:
++        xtsel = 2;
++        break;
++    default:                   /* shouldn't get here */
++        xtsel = 3;              /* hardware default */
++        break;
++    }
++
++    btwrite(bt, IFORM, (bt->mux << 5) | (xtsel << 3) | bt->format);
++}
++
++static void
++btwrite_tdec(BT829Ptr bt)
++{                               /* TDEC */
++    /* use default */
++}
++
++static void
++btwrite_crop(BT829Ptr bt)
++{                               /* CROP */
++    btwrite(bt, CROP, (H(bt->vdelay) << 6) | (H(bt->vactive) << 4) |
++            (H(bt->hdelay) << 2) | H(bt->width));
++}
++
++static void
++btwrite_vdelay_lo(BT829Ptr bt)
++{                               /* VDELAY_LO */
++    btwrite(bt, VDELAY_LO, L(bt->vdelay));
++}
++
++static void
++btwrite_vactive_lo(BT829Ptr bt)
++{                               /* VACTIVE_LO */
++    btwrite(bt, VACTIVE_LO, L(bt->vactive));
++}
++
++static void
++btwrite_hdelay_lo(BT829Ptr bt)
++{                               /* HDELAY_LO */
++    btwrite(bt, HDELAY_LO, L(bt->hdelay));
++}
++
++static void
++btwrite_hactive_lo(BT829Ptr bt)
++{                               /* HACTIVE_LO */
++    btwrite(bt, HACTIVE_LO, L(bt->width));
++}
++
++static void
++btwrite_hscale_hi(BT829Ptr bt)
++{                               /* HSCALE_HI */
++    btwrite(bt, HSCALE_HI, H(bt->hscale));
++}
++
++static void
++btwrite_hscale_lo(BT829Ptr bt)
++{                               /* HSCALE_LO */
++    btwrite(bt, HSCALE_LO, L(bt->hscale));
++}
++
++static void
++btwrite_bright(BT829Ptr bt)
++{                               /* BRIGHT */
++    btwrite(bt, BRIGHT, bt->brightness);
++}
++
++static void
++btwrite_control(BT829Ptr bt)
++{                               /* CONTROL */
++    int ldec;
++
++    /* The data sheet says ldec should always be 0 for SECAM */
++    /* but the picture quality is better with ldec = 1       */
++    ldec = (bt->width > 360);   /* gatos says 384 */
++
++    btwrite(bt, CONTROL, ((bt->mux == bt->svideo_mux) ? 0xC0 : 0x00) |  /* LNOTCH and COMP */
++            (ldec << 5) | (H(bt->contrast) << 2) | (H(bt->sat_u) << 1) | H(bt->
++                                                                           sat_v));
++}
++
++static void
++btwrite_contrast_lo(BT829Ptr bt)
++{                               /* CONTRAST_LO */
++    btwrite(bt, CONTRAST_LO, L(bt->contrast));
++}
++
++static void
++btwrite_sat_u_lo(BT829Ptr bt)
++{                               /* SAT_U_LO */
++    btwrite(bt, SAT_U_LO, L(bt->sat_u));
++}
++
++static void
++btwrite_sat_v_lo(BT829Ptr bt)
++{                               /* SAT_V_LO */
++    btwrite(bt, SAT_V_LO, L(bt->sat_v));
++}
++
++static void
++btwrite_hue(BT829Ptr bt)
++{                               /* HUE */
++    btwrite(bt, HUE, bt->hue);
++}
++
++static void
++btwrite_scloop(BT829Ptr bt)
++{                               /* SCLOOP */
++    if (BTVERSION >= BT827) {
++        btwrite(bt, SCLOOP, (bt->format == BT829_SECAM) ? 0x10 : 0x00   /* QCIF or AUTO */
++            );
++    }
++}
++
++static void
++btwrite_wc_up(BT829Ptr bt)
++{                               /* WC_UP */
++    if (BTVERSION >= BT827) {
++        /* use default */
++    }
++}
++
++static void
++btwrite_oform(BT829Ptr bt)
++{                               /* OFORM */
++    btwrite(bt, OFORM, (bt->code << 3) | (bt->len << 2) | 0x02  /* RANGE = 0, CORE = 0, VBI_FRAME = 0, OES = 2 (default) */
++        );
++}
++
++static void
++btwrite_vscale_hi(BT829Ptr bt)
++{                               /* VSCALE_HI */
++    btwrite(bt, VSCALE_HI, H(bt->vscale) | 0x60 /* YCOMB = 0, COMB = 1, INT = 1 (default) */
++        );
++}
++
++static void
++btwrite_vscale_lo(BT829Ptr bt)
++{                               /* VSCALE_LO */
++    btwrite(bt, VSCALE_LO, L(bt->vscale));
++}
++
++/* TEST should not be written to */
++
++static void
++btwrite_vpole(BT829Ptr bt)
++{                               /* VPOLE */
++    btwrite(bt, VPOLE, (bt->out_en << 7));
++}
++
++/* IDCODE is read only */
++
++static void
++btwrite_adelay(BT829Ptr bt)
++{                               /* ADELAY */
++    switch (bt->format) {
++    case BT829_NTSC:
++    case BT829_NTSC_JAPAN:
++    case BT829_PAL_M:
++        btwrite(bt, ADELAY, 104);
++        break;
++    case BT829_PAL:
++    case BT829_PAL_N:
++    case BT829_SECAM:
++    case BT829_PAL_N_COMB:
++        btwrite(bt, ADELAY, 127);
++        break;
++    default:                   /* shouldn't get here */
++        btwrite(bt, ADELAY, 104);       /* hardware default */
++        break;
++    }
++}
++
++static void
++btwrite_bdelay(BT829Ptr bt)
++{                               /* BDELAY */
++    switch (bt->format) {
++    case BT829_NTSC:
++    case BT829_NTSC_JAPAN:
++    case BT829_PAL_M:
++        btwrite(bt, BDELAY, 93);
++        break;
++    case BT829_PAL:
++    case BT829_PAL_N:
++    case BT829_PAL_N_COMB:
++        btwrite(bt, BDELAY, 114);
++        break;
++    case BT829_SECAM:
++        btwrite(bt, BDELAY, 160);
++        break;
++    default:                   /* shouldn't get here */
++        btwrite(bt, BDELAY, 93);        /* hardware default */
++        break;
++    }
++}
++
++static void
++btwrite_adc(BT829Ptr bt)
++{                               /* ADC */
++    btwrite(bt, ADC, bt->mux == bt->svideo_mux ? 0x80 : 0x82);  /* CSLEEP = 0 or 1 */
++}
++
++static void
++btwrite_vtc(BT829Ptr bt)
++{                               /* VTC */
++    int vfilt = 0;              /* hardware default */
++
++    if (BTVERSION > BT827) {    /* gatos says >= BT827 */
++        switch (bt->format) {
++        case BT829_NTSC:
++        case BT829_NTSC_JAPAN:
++        case BT829_PAL_M:
++        case BT829_PAL_N_COMB: /* gatos groups with BT829_PAL */
++            if (bt->width <= 360)
++                vfilt = 1;      /* gatos says <= 240 */
++            if (bt->width <= 180)
++                vfilt = 2;      /* gatos says <= 120 */
++            if (bt->width <= 90)
++                vfilt = 3;      /* gatos says <= 60 */
++            break;
++        case BT829_PAL:
++        case BT829_PAL_N:
++        case BT829_SECAM:
++            if (bt->width <= 384)
++                vfilt = 1;
++            if (bt->width <= 192)
++                vfilt = 2;
++            if (bt->width <= 96)
++                vfilt = 3;
++            break;
++        default:               /* shouldn't get here */
++            break;              /* use hardware default */
++        }
++        btwrite(bt, VTC, (bt->vbien << 4) | (bt->vbifmt << 3) | vfilt);
++    }
++}
++
++static void
++btwrite_cc_status(BT829Ptr bt)
++{                               /* CC_STATUS *//* FIXME: ATI specific */
++    if (BTVERSION >= BT827) {
++        if (bt->ccmode == 0)
++            btwrite(bt, CC_STATUS, 0x00);
++        /* 0x40 is activate to set the CCVALID line. Not required yet */
++        else
++            btwrite(bt, CC_STATUS, (bt->ccmode << 4) | 0x40);
++    }
++}
++
++/* CC_DATA is read only */
++
++static void
++btwrite_wc_dn(BT829Ptr bt)
++{                               /* WC_DN */
++    if (BTVERSION >= BT827) {
++        /* use default */
++    }
++}
++
++static void
++bt_reset(BT829Ptr bt)
++{                               /* SRESET */
++    btwrite(bt, SRESET, 0x0);   /* Reset all registers */
++}
++
++static void
++btwrite_p_io(BT829Ptr bt)
++{                               /* P_IO */
++    if (BTVERSION >= BT827) {
++        btwrite(bt, P_IO, bt->p_io);
++    }
++}
++
++/*
++ * Deal with dependencies
++ */
++static void
++propagate_changes(BT829Ptr bt)
++{
++    CARD16 hdelay, unscaled_hdelay, vdelay, hscale, vscale;
++    int htotal, vactive;
++
++    switch (bt->format) {
++    case BT829_NTSC:
++    case BT829_NTSC_JAPAN:
++    case BT829_PAL_M:
++        vdelay = 22;
++        htotal = 754;
++        vactive = 480;
++        unscaled_hdelay = 135;
++        break;
++    case BT829_PAL:
++    case BT829_PAL_N:
++        vdelay = (bt->tunertype == 5) ? 34 : 22;
++        htotal = 922;
++        vactive = 576;
++        unscaled_hdelay = 186;
++        break;
++    case BT829_SECAM:
++        vdelay = 34;
++        htotal = 922;
++        vactive = 576;
++        unscaled_hdelay = 186;
++        break;
++    case BT829_PAL_N_COMB:
++        vdelay = (bt->tunertype == 5) ? 34 : 22;        /* windows says 22 */
++        htotal = 754;           /* gatos and windows say 922 */
++        vactive = 576;
++        unscaled_hdelay = 135;  /* gatos and windows say 186 */
++        break;
++    default:                   /* shouldn't get here */
++        vdelay = 22;            /* hardware default */
++        htotal = 754;
++        vactive = 480;          /* hardware default */
++        unscaled_hdelay = 135;
++        break;
++    }
++
++    bt->htotal = htotal;        /* Used for error checking in bt829_SetCaptSize */
++
++    hscale = 4096 * htotal / (bt->width + 2 * HCROP) - 4096;
++    hdelay =
++        (HCROP + (bt->width + 2 * HCROP) * unscaled_hdelay / htotal) & 0x3FE;
++
++    vactive = vactive - 2 * VCROP;
++    vdelay = vdelay + VCROP;
++    vscale = (0x10000 - (512 * vactive / bt->height - 512)) & 0x1FFF;
++
++    if ((hdelay != bt->hdelay) || (vdelay != bt->vdelay) ||
++        (vactive != bt->vactive) || (hscale != bt->hscale) ||
++        (vscale != bt->vscale)) {
++        bt->hdelay = hdelay;
++        bt->vdelay = vdelay;
++        bt->vactive = vactive;
++        bt->hscale = hscale;
++        bt->vscale = vscale;
++        btwrite_crop(bt);
++        btwrite_vdelay_lo(bt);
++        btwrite_vactive_lo(bt);
++        btwrite_hdelay_lo(bt);
++        btwrite_hscale_hi(bt);
++        btwrite_hscale_lo(bt);
++        btwrite_control(bt);
++        btwrite_vscale_hi(bt);
++        btwrite_vscale_lo(bt);
++    }
++}
++
++static void
++write_all(BT829Ptr bt)
++{
++    bt_reset(bt);
++    propagate_changes(bt);      /* ensure consistency */
++    btwrite_iform(bt);
++    btwrite_tdec(bt);
++    btwrite_crop(bt);
++    btwrite_vdelay_lo(bt);
++    btwrite_vactive_lo(bt);
++    btwrite_hdelay_lo(bt);
++    btwrite_hactive_lo(bt);
++    btwrite_hscale_hi(bt);
++    btwrite_hscale_lo(bt);
++    btwrite_bright(bt);
++    btwrite_control(bt);
++    btwrite_contrast_lo(bt);
++    btwrite_sat_u_lo(bt);
++    btwrite_sat_v_lo(bt);
++    btwrite_hue(bt);
++    btwrite_scloop(bt);
++    btwrite_wc_up(bt);
++    btwrite_oform(bt);
++    btwrite_vscale_hi(bt);
++    btwrite_vscale_lo(bt);
++    btwrite_vpole(bt);
++    btwrite_adelay(bt);
++    btwrite_bdelay(bt);
++    btwrite_adc(bt);
++    btwrite_vtc(bt);
++    /*  btwrite_cc_status(bt); *//* FIXME: CC code needs cleaning */
++    btwrite_wc_dn(bt);
++    btwrite_p_io(bt);
++}
++
++/*
++ * Public functions
++ */
++BT829Ptr
++bt829_Detect(I2CBusPtr b, I2CSlaveAddr addr)
++{
++    BT829Ptr bt;
++    I2CByte a;
++    char *devname;
++
++    bt = calloc(1, sizeof(BT829Rec));
++    if (bt == NULL)
++        return NULL;
++    bt->d.DevName = strdup("BT829 video decoder");
++    bt->d.SlaveAddr = addr;
++    bt->d.pI2CBus = b;
++    bt->d.NextDev = NULL;
++    bt->d.StartTimeout = b->StartTimeout;
++    bt->d.BitTimeout = b->BitTimeout;
++    bt->d.AcknTimeout = b->AcknTimeout;
++    bt->d.ByteTimeout = b->ByteTimeout;
++
++    if (!I2C_WriteRead(&(bt->d), NULL, 0, &a, 1)) {
++        free(bt);
++        return NULL;
++    }
++
++    bt->id = btread(bt, IDCODE);
++
++    free((void *) bt->d.DevName);
++    bt->d.DevName = devname = calloc(200, sizeof(char));
++    switch (BTVERSION) {
++    case BT815:
++        sprintf(devname, "bt815a video decoder, revision %d",
++                bt->id & 0xf);
++        break;
++    case BT817:
++        sprintf(devname, "bt817a video decoder, revision %d",
++                bt->id & 0xf);
++        break;
++    case BT819:
++        sprintf(devname, "bt819a video decoder, revision %d",
++                bt->id & 0xf);
++        break;
++    case BT827:
++        sprintf(devname, "bt827a/b video decoder, revision %d",
++                bt->id & 0xf);
++        break;
++    case BT829:
++        sprintf(devname, "bt829a/b video decoder, revision %d",
++                bt->id & 0xf);
++        break;
++    default:
++        sprintf(devname,
++                "bt8xx/unknown video decoder version %d, revision %d",
++                bt->id >> 4, bt->id & 0xf);
++        break;
++    }
++
++    /* set default parameters */
++    if (!I2CDevInit(&(bt->d))) {
++        free(bt);
++        return NULL;
++    }
++
++    bt->tunertype = 1;
++
++    bt->brightness = 0;         /* hardware default */
++    bt->ccmode = 0;
++    bt->code = 0;               /* hardware default */
++    bt->contrast = 216;         /* hardware default */
++    bt->format = BT829_NTSC;
++    bt->height = 480;           /* hardware default for vactive */
++    bt->hue = 0;                /* hardware default */
++    bt->len = 1;                /* hardware default */
++    bt->mux = BT829_MUX0;       /* hardware default */
++    bt->out_en = 0;             /* hardware default */
++    bt->p_io = 0;               /* hardware default */
++    bt->sat_u = 254;            /* hardware default */
++    bt->sat_v = 180;            /* hardware default */
++    bt->vbien = 0;              /* hardware default */
++    bt->vbifmt = 0;             /* hardware default */
++    bt->width = 640;            /* hardware default for hactive */
++
++    bt->hdelay = 120;           /* hardware default */
++    bt->hscale = 684;           /* hardware default */
++    bt->vactive = 480;          /* hardware default */
++    bt->vdelay = 22;            /* hardware default */
++    bt->vscale = 0;             /* hardware default */
++
++    bt->htotal = 754;           /* NTSC */
++    bt->svideo_mux = 0;         /* no s-video */
++
++    return bt;
++}
++
++int
++bt829_ATIInit(BT829Ptr bt)
++{
++    bt->code = 1;
++    bt->len = 0;
++    bt->vbien = 1;
++    bt->vbifmt = 1;
++    bt->svideo_mux = BT829_MUX1;
++
++    write_all(bt);
++
++    return 0;
++}
++
++int
++bt829_SetFormat(BT829Ptr bt, CARD8 format)
++{
++    if ((format < 1) || (format > 7))
++        return -1;
++    if ((BTVERSION <= BT819) && (format != BT829_NTSC) && (format != BT829_PAL))
++        return -1;
++    if (format == bt->format)
++        return 0;
++    bt->format = format;
++    propagate_changes(bt);
++    btwrite_iform(bt);
++    btwrite_scloop(bt);
++    btwrite_adelay(bt);
++    btwrite_bdelay(bt);
++    btwrite_vtc(bt);
++    return 0;
++}
++
++int
++bt829_SetMux(BT829Ptr bt, CARD8 mux)
++{
++    if ((mux < 1) || (mux > 3))
++        return -1;
++    if (mux == bt->mux)
++        return 0;
++    bt->mux = mux;
++    /* propagate_changes(bt); *//* no dependencies */
++    btwrite_iform(bt);
++    btwrite_control(bt);
++    btwrite_adc(bt);
++    return 0;
++}
++
++void
++bt829_SetBrightness(BT829Ptr bt, int brightness)
++{
++    brightness = LIMIT(brightness, -1000, 999); /* ensure -128 <= brightness <= 127 below */
++    brightness = (128 * brightness) / 1000;
++    if (brightness == bt->brightness)
++        return;
++    bt->brightness = brightness;
++    /* propagate_changes(bt); *//* no dependencies */
++    btwrite_bright(bt);
++}
++
++void
++bt829_SetContrast(BT829Ptr bt, int contrast)
++{
++    contrast = LIMIT(contrast, -1000, 1000);
++    contrast = (216 * (contrast + 1000)) / 1000;
++    if (contrast == bt->contrast)
++        return;
++    bt->contrast = contrast;
++    /* propagate_changes(bt); *//* no dependencies */
++    btwrite_control(bt);
++    btwrite_contrast_lo(bt);
++}
++
++void
++bt829_SetSaturation(BT829Ptr bt, int saturation)
++{
++    CARD16 sat_u, sat_v;
++
++    saturation = LIMIT(saturation, -1000, 1000);
++    sat_u = (254 * (saturation + 1000)) / 1000;
++    sat_v = (180 * (saturation + 1000)) / 1000;
++    if ((sat_u == bt->sat_u) && (sat_v == bt->sat_v))
++        return;
++    bt->sat_u = sat_u;
++    bt->sat_v = sat_v;
++    /* propagate_changes(bt); *//* no dependencies */
++    btwrite_control(bt);
++    btwrite_sat_u_lo(bt);
++    btwrite_sat_v_lo(bt);
++}
++
++void
++bt829_SetTint(BT829Ptr bt, int hue)
++{
++    hue = LIMIT(hue, -1000, 999);       /* ensure -128 <= hue <= 127 below */
++    hue = (128 * hue) / 1000;
++    if (hue == bt->hue)
++        return;
++    bt->hue = hue;
++    /* propagate_changes(bt); *//* no dependencies */
++    btwrite_hue(bt);
++}
++
++int
++bt829_SetCaptSize(BT829Ptr bt, int width, int height)
++{
++    if ((width > bt->htotal - 2 * HCROP) ||
++        (16 * width < bt->htotal - 32 * HCROP))
++        return -1;
++    if ((height > bt->vactive) || (16 * height < bt->vactive))
++        return -1;
++    if ((width == bt->width) && (height == bt->height))
++        return 0;
++    bt->width = width;
++    bt->height = height;
++    propagate_changes(bt);
++    btwrite_crop(bt);
++    btwrite_hactive_lo(bt);
++    btwrite_control(bt);
++    btwrite_vtc(bt);
++    return 0;
++}
++
++int
++bt829_SetCC(BT829Ptr bt)
++{                               /* FIXME: should take ccmode as a parameter */
++    if (BTVERSION < BT827)
++        return -1;              /* can't do it */
++    /* propagate_changes(bt); *//* no dependencies */
++    btwrite_cc_status(bt);
++    /* we write to STATUS to reset the CCVALID flag */
++    if (bt->ccmode != 0)
++        btwrite_status(bt);
++    return 0;
++}
++
++void
++bt829_SetOUT_EN(BT829Ptr bt, BOOL out_en)
++{
++    out_en = (out_en != 0);
++    if (out_en == bt->out_en)
++        return;
++    bt->out_en = out_en;
++    /* propagate_changes(bt); *//* no dependencies */
++    btwrite_vpole(bt);
++}
++
++void
++bt829_SetP_IO(BT829Ptr bt, CARD8 p_io)
++{
++    if (p_io == bt->p_io)
++        return;
++    bt->p_io = p_io;
++    /* propagate_changes(bt); *//* no dependencies */
++    btwrite_p_io(bt);
++}
++
++#define BTREAD(R)	btread(bt,(R))
++
++#if 0
++
++void
++bt829_getCCdata(BT829Ptr bt, struct CCdata *data)
++{
++    CARD8 status;
++
++    data->num_valid = 0;
++    /* wait for buffer to be half full (means 8/16 bytes)
++     * either 4 (one of CC/EDS) or 2 (both CC/EDS) frames */
++    if (!(BTREAD(STATUS) & 0x04))
++        return;                 /* could comment this line */
++    for (; data->num_valid < CC_FIFO_SIZE; data->num_valid++) {
++        status = BTREAD(CC_STATUS);
++        if (!(status & 0x04))
++            break;
++        data->data[data->num_valid] = BTREAD(CC_DATA) & 0x7f;
++        /* stripped high bit (parity) */
++        data->status[data->num_valid] = (CCS_EDS * ((status & 0x02) >> 1)) |
++            (CCS_HIGH * (status & 0x01)) |
++            (CCS_OVER * ((status & 0x08) >> 3)) |
++            (CCS_PAR * ((status & 0x80) >> 7));
++    }
++    btwrite(bt, STATUS, 0x00);  /* Reset CCVALID status bit */
++    return;
++}
++
++#endif
++
++/* ------------------------------------------------------------------------ */
++/* Debug and report routines */
++
++#define DUMPREG(REG)   \
++  xf86DrvMsg(bt->d.pI2CBus->scrnIndex,X_INFO," %-12s (0x%02X) = 0x%02X\n", \
++              #REG,REG,BTREAD(REG))
++
++/*static void bt829_dumpregs(BT829Ptr bt)
++{
++  DUMPREG(STATUS);
++  DUMPREG(IFORM);
++  DUMPREG(TDEC);
++  DUMPREG(CROP);
++  DUMPREG(VDELAY_LO);
++  DUMPREG(VACTIVE_LO);
++  DUMPREG(HDELAY_LO);
++  DUMPREG(HACTIVE_LO);
++  DUMPREG(HSCALE_HI);
++  DUMPREG(HSCALE_LO);
++  DUMPREG(BRIGHT);
++  DUMPREG(CONTROL);
++  DUMPREG(CONTRAST_LO);
++  DUMPREG(SAT_U_LO);
++  DUMPREG(SAT_V_LO);
++  DUMPREG(HUE);
++  if (BTVERSION >= BT827) {
++    DUMPREG(SCLOOP);
++    DUMPREG(WC_UP) ; }
++  DUMPREG(OFORM);
++  DUMPREG(VSCALE_HI);
++  DUMPREG(VSCALE_LO);
++  DUMPREG(TEST);
++  DUMPREG(VPOLE);
++  DUMPREG(IDCODE);
++  DUMPREG(ADELAY);
++  DUMPREG(BDELAY);
++  DUMPREG(ADC);
++  if (BTVERSION >= BT827) {
++    DUMPREG(VTC);
++    DUMPREG(CC_STATUS);
++    DUMPREG(CC_DATA);
++    DUMPREG(WC_DN);
++    DUMPREG(P_IO) ; }
++}*/
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/bt829.h
+@@ -0,0 +1,103 @@
++#ifndef __BT829_H__
++#define __BT829_H__
++
++#include "xf86i2c.h"
++
++typedef struct {
++    int tunertype;              /* Must be set before init */
++    /* Private variables */
++    I2CDevRec d;
++
++    CARD8 brightness;
++    CARD8 ccmode;
++    CARD8 code;
++    CARD16 contrast;
++    CARD8 format;
++    int height;
++    CARD8 hue;
++    CARD8 len;
++    CARD8 mux;
++    CARD8 out_en;
++    CARD8 p_io;
++    CARD16 sat_u;
++    CARD16 sat_v;
++    CARD8 vbien;
++    CARD8 vbifmt;
++    int width;
++
++    CARD16 hdelay;
++    CARD16 hscale;
++    CARD16 vactive;
++    CARD16 vdelay;
++    CARD16 vscale;
++
++    CARD16 htotal;
++    CARD8 id;
++    CARD8 svideo_mux;
++} BT829Rec, *BT829Ptr;
++
++#define xf86_bt829_Detect	bt829_Detect
++extern _X_EXPORT BT829Ptr bt829_Detect(I2CBusPtr b, I2CSlaveAddr addr);
++
++/* ATI card specific initialization */
++#define BT829_ATI_ADDR_1	0x8A
++#define BT829_ATI_ADDR_2	0x88
++
++#define xf86_bt829_ATIInit	bt829_ATIInit
++extern _X_EXPORT int bt829_ATIInit(BT829Ptr bt);
++
++#define BT829_NTSC		1       /* NTSC-M */
++#define BT829_NTSC_JAPAN	2       /* NTSC-Japan */
++#define BT829_PAL		3       /* PAL-B,D,G,H,I */
++#define BT829_PAL_M		4       /* PAL-M */
++#define BT829_PAL_N		5       /* PAL-N */
++#define BT829_SECAM		6       /* SECAM */
++#define BT829_PAL_N_COMB	7       /* PAL-N combination */
++
++#define xf86_bt829_SetFormat	bt829_SetFormat
++extern _X_EXPORT int bt829_SetFormat(BT829Ptr bt, CARD8 format);
++
++#define BT829_MUX2	1       /* ATI -> composite video */
++#define BT829_MUX0	2       /* ATI -> tv tuner */
++#define BT829_MUX1	3       /* ATI -> s-video */
++
++#define xf86_bt829_SetMux	bt829_SetMux
++extern _X_EXPORT int bt829_SetMux(BT829Ptr bt, CARD8 mux);
++
++#define xf86_bt829_SetCaptSize		bt829_SetCaptSize
++extern _X_EXPORT int bt829_SetCaptSize(BT829Ptr bt, int width, int height);
++
++#define xf86_bt829_SetBrightness	bt829_SetBrightness
++extern _X_EXPORT void bt829_SetBrightness(BT829Ptr bt, int brightness);
++
++#define xf86_bt829_SetContrast		bt829_SetContrast
++extern _X_EXPORT void bt829_SetContrast(BT829Ptr bt, int contrast);
++
++#define xf86_bt829_SetSaturation	bt829_SetSaturation
++extern _X_EXPORT void bt829_SetSaturation(BT829Ptr bt, int saturation);
++
++#define xf86_bt829_SetTint		bt829_SetTint
++extern _X_EXPORT void bt829_SetTint(BT829Ptr bt, int hue);      /* Hue */
++
++#define xf86_bt829_SetOUT_EN		bt829_SetOUT_EN
++extern _X_EXPORT void bt829_SetOUT_EN(BT829Ptr bt, BOOL out_en);        /* VPOLE register */
++
++#define xf86_bt829_SetP_IO		bt829_SetP_IO
++extern _X_EXPORT void bt829_SetP_IO(BT829Ptr bt, CARD8 p_io);   /* P_IO register */
++
++extern _X_EXPORT int bt829_SetCC(BT829Ptr bt);
++
++#define BT829SymbolsList   \
++		"bt829_Detect", \
++		"bt829_ATIInit", \
++		"bt829_SetFormat", \
++		"bt829_SetMux", \
++		"bt829_SetBrightness", \
++		"bt829_SetContrast", \
++		"bt829_SetSaturation", \
++		"bt829_SetTint", \
++		"bt829_SetCaptSize", \
++		"bt829_SetOUT_EN", \
++		"bt829_SetP_IO"
++
++#endif
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/bt829_module.c
+@@ -0,0 +1,20 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86Module.h"
++
++static XF86ModuleVersionInfo bt829VersRec = {
++    "bt829",
++    MODULEVENDORSTRING,
++    MODINFOSTRING1,
++    MODINFOSTRING2,
++    XORG_VERSION_CURRENT,
++    1, 0, 0,
++    ABI_CLASS_VIDEODRV,         /* This needs the video driver ABI */
++    ABI_VIDEODRV_VERSION,
++    MOD_CLASS_NONE,
++    {0, 0, 0, 0}
++};
++
++_X_EXPORT XF86ModuleData bt829ModuleData = { &bt829VersRec, NULL, NULL };
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/fi1236.c
+@@ -0,0 +1,686 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include <unistd.h>
++#include <stdlib.h>
++#include <string.h>
++#include <math.h>
++
++#include "xf86.h"
++#include "xf86i2c.h"
++#include "fi1236.h"
++#include "tda9885.h"
++#include "i2c_def.h"
++
++#define NUM_TUNERS    8
++
++const FI1236_parameters tuner_parms[NUM_TUNERS] = {
++    /* 0 - FI1236 */
++    {733, 884, 12820, 2516, 7220, 0xA2, 0x94, 0x34, 0x8e},
++    /* !!!based on documentation - it should be:
++       {733, 16*55.25, 16*801.25, 16*160, 16*454, 0xA0, 0x90, 0x30, 0x8e}, */
++
++    /* 1 - FI1216 */
++    {623, 16 * 48.75, 16 * 855.25, 16 * 170, 16 * 450, 0xA0, 0x90, 0x30, 0x8e},
++    /* 2 - TEMIC FN5AL */
++    {623, 16 * 45.75, 16 * 855.25, 16 * 169, 16 * 454, 0xA0, 0x90, 0x30, 0x8e},
++    /* 3 - MT2032.. */
++    {733, 768, 13760, 0, 0, 0, 0, 0, 0},
++    /* 4 - FI1246 */
++    {623, 16 * 45.75, 16 * 855.25, 16 * 170, 16 * 450, 0xA0, 0x90, 0x30, 0x8e},
++    /* 5 - FI1256 */
++    {623, 16 * 49.75, 16 * 863.25, 16 * 170, 16 * 450, 0xA0, 0x90, 0x30, 0x8e},
++    /* 6 - FI1236W */
++    /*{ 733, 884, 12820, 2516, 7220, 0x1, 0x2, 0x4, 0x8e }, */
++    {732, 16 * 55.25, 16 * 801.25, 16 * 160, 16 * 442, 0x1, 0x2, 0x4, 0x8e},
++    /* 7 - FM1216ME */
++    {623, 16 * 48.25, 16 * 863.25, 16 * 158.00, 16 * 442.00, 0x1, 0x2, 0x4, 0x8e}
++};
++
++FI1236Ptr
++Detect_FI1236(I2CBusPtr b, I2CSlaveAddr addr)
++{
++    FI1236Ptr f;
++    I2CByte a;
++
++    f = calloc(1, sizeof(FI1236Rec));
++    if (f == NULL)
++        return NULL;
++    f->d.DevName = strdup("FI12xx Tuner");
++    f->d.SlaveAddr = addr;
++    f->d.pI2CBus = b;
++    f->d.NextDev = NULL;
++    f->d.StartTimeout = b->StartTimeout;
++    f->d.BitTimeout = b->BitTimeout;
++    f->d.AcknTimeout = b->AcknTimeout;
++    f->d.ByteTimeout = b->ByteTimeout;
++    f->type = TUNER_TYPE_FI1236;
++    f->afc_timer_installed = FALSE;
++    f->last_afc_hint = TUNER_OFF;
++    f->video_if = 45.7812;
++
++    if (!I2C_WriteRead(&(f->d), NULL, 0, &a, 1)) {
++        free(f);
++        return NULL;
++    }
++    FI1236_set_tuner_type(f, TUNER_TYPE_FI1236);
++    if (!I2CDevInit(&(f->d))) {
++        free(f);
++        return NULL;
++    }
++    return f;
++}
++
++static void
++MT2032_dump_parameters(FI1236Ptr f, MT2032_parameters * m)
++{
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "MT2032: input f_rf=%g f_if1=%g f_if2=%g f_ref=%g f_ifbw=%g f_step=%g\n",
++               m->f_rf, m->f_if1, m->f_if2, m->f_ref, m->f_ifbw, m->f_step);
++
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "MT2032: computed f_lo1=%g f_lo2=%g LO1I=%d LO2I=%d SEL=%d STEP=%d NUM=%d\n",
++               m->f_lo1, m->f_lo2, m->LO1I, m->LO2I, m->SEL, m->STEP, m->NUM);
++}
++
++static void
++MT2032_getid(FI1236Ptr f)
++{
++    CARD8 out[4];
++    CARD8 in;
++
++    in = 0x11;
++    I2C_WriteRead(&(f->d), (I2CByte *) &in, 1, out, 4);
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "MT2032: Company code 0x%02x%02x, part code 0x%02x, revision code 0x%02x\n",
++               out[0], out[1], out[2], out[3]);
++
++}
++
++/* might be buggy */
++#if 0
++static void
++MT2032_shutdown(FI1236Ptr f)
++{
++    CARD8 data[10];
++
++    data[0] = 0x00;             /* start with register 0x00 */
++    data[1] = 0x1A;
++    data[2] = 0x44;
++    data[3] = 0x20;
++
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 4, NULL, 0);
++
++    data[0] = 0x05;             /* now start with register 0x05 */
++    data[1] = 0xD7;
++    data[2] = 0x14;
++    data[3] = 0x05;
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 4, NULL, 0);
++
++    data[0] = 0x0B;             /* now start with register 0x05 */
++    data[1] = 0x8F;
++    data[2] = 0x07;
++    data[3] = 0x43;
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 4, NULL, 0);
++
++    usleep(15000);
++}
++#endif
++
++static void MT2032_dump_status(FI1236Ptr f);
++
++static void
++MT2032_init(FI1236Ptr f)
++{
++    CARD8 data[10];
++    CARD8 value;
++    CARD8 xogc = 0x00;
++
++    MT2032_getid(f);
++
++    data[0] = 0x02;             /* start with register 0x02 */
++    data[1] = 0xFF;
++    data[2] = 0x0F;
++    data[3] = 0x1F;
++
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 4, NULL, 0);
++
++    data[0] = 0x06;             /* now start with register 0x06 */
++    data[1] = 0xE4;
++    data[2] = 0x8F;
++    data[3] = 0xC3;
++    data[4] = 0x4E;
++    data[5] = 0xEC;
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 6, NULL, 0);
++
++    data[0] = 0x0d;             /* now start with register 0x0d */
++    data[1] = 0x32;
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 2, NULL, 0);
++
++    while (1) {
++        usleep(15000);          /* wait 15 milliseconds */
++
++        data[0] = 0x0e;         /* register number 7, status */
++        value = 0xFF;
++        if (!I2C_WriteRead(&(f->d), (I2CByte *) data, 1, &value, 1))
++            xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++                       "MT2032: failed to read XOK\n");
++        xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++                   "MT2032: XOK=%d\n", value & 0x01);
++        if (value & 1)
++            break;
++
++        data[0] = 0x07;
++        if (!I2C_WriteRead(&(f->d), (I2CByte *) data, 1, &value, 1))
++            xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++                       "MT2032: failed to read XOGC\n");
++
++        xogc = value & 0x7;
++        if (xogc == 4)
++            break;              /* XOGC has reached 4.. stop */
++        xogc--;
++        xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++                   "MT2032: try XOGC=%d\n", xogc);
++        usleep(15000);
++        data[0] = 0x07;         /* register number 7, control byte 2 */
++        data[1] = 0x08 | xogc;
++        I2C_WriteRead(&(f->d), (I2CByte *) data, 2, NULL, 0);
++    }
++    f->xogc = xogc;
++    /* wait before continuing */
++    usleep(15000);              /* wait 50 milliseconds */
++    MT2032_dump_status(f);
++}
++
++static int
++MT2032_no_spur_in_band(MT2032_parameters * m)
++{
++    int n_max, n1, n2;
++    double f_test;
++
++    n_max = 5;
++    n1 = 1;
++    while (1) {
++        n2 = -n1;
++        f_test = n1 * (m->f_lo1 - m->f_lo2);
++        while (1) {
++            n2--;
++            f_test = f_test - m->f_lo2;
++            xf86DrvMsg(0, X_INFO,
++                       "testing f_test=%g n1=%d n2=%d f_lo1=%g f_lo2=%g f_if2=%g\n",
++                       f_test, n1, n2, m->f_lo1, m->f_lo2, m->f_if2);
++            xf86DrvMsg(0, X_INFO, "d_f=%g f_ifbw=%g\n",
++                       fabs(fabs(f_test) - m->f_if2), m->f_ifbw);
++            if ((fabs(fabs(f_test) - m->f_if2) * 2.0) <= m->f_ifbw)
++                return 0;
++            if (n2 <= -n_max)
++                break;
++            /* this line in the manual is bogus. I say it is faster
++               and more correct to go over all harmonics.. */
++#if 0
++            if (f_test < (m->f_lo2 - m->f_if2 - m->f_ifbw))
++                break;
++#endif
++        }
++        n1++;
++        if (n1 >= n_max)
++            return 1;
++    }
++
++}
++
++static void
++MT2032_calculate_register_settings(MT2032_parameters * m, double f_rf,
++                                   double f_if1, double f_if2, double f_ref,
++                                   double f_ifbw, double f_step)
++{
++    int n;
++
++    m->f_rf = f_rf;
++    m->f_if1 = f_if1;
++    m->f_if2 = f_if2;
++    m->f_ref = f_ref;
++    m->f_ifbw = f_ifbw;
++    m->f_step = f_step;
++
++    m->f_lo1 = f_rf + f_if1;
++    m->LO1I = lrint(m->f_lo1 / f_ref);
++    m->f_lo1 = f_ref * m->LO1I;
++
++    m->f_lo2 = m->f_lo1 - f_rf - f_if2;
++
++    /* check for spurs */
++    n = 1;
++    while (n < 3) {
++        if (MT2032_no_spur_in_band(m))
++            break;
++
++        if (m->f_lo1 < (f_rf + f_if1))
++            m->LO1I += n;
++        else
++            m->LO1I -= n;
++
++        m->f_lo1 = m->LO1I * f_ref;
++        m->f_lo2 = m->f_lo1 - f_rf - f_if2;
++        n++;
++    }
++    /* xf86DrvMsg(0, X_INFO, "MT2032: n=%d\n", n); */
++    /* select VCO */
++
++    /* m->f_lo1>1100.0 */
++    if (m->f_lo1 < 1370.0)
++        m->SEL = 4;
++    else if (m->f_lo1 < 1530.0)
++        m->SEL = 3;
++    else if (m->f_lo1 < 1720.0)
++        m->SEL = 2;
++    else if (m->f_lo1 < 1890.0)
++        m->SEL = 1;
++    else                        /* m->f_lo1 < 1958.0 */
++        m->SEL = 0;
++
++    /* calculate the rest of the registers */
++    m->LO2I = floor(m->f_lo2 / f_ref);
++    m->STEP = floor(3780.0 * f_step / f_ref);
++    m->NUM = floor(3780.0 * (m->f_lo2 / f_ref - m->LO2I));
++    m->NUM = m->STEP * lrint((1.0 * m->NUM) / (1.0 * m->STEP));
++}
++
++static int
++MT2032_wait_for_lock(FI1236Ptr f)
++{
++    int n;
++    CARD8 data[10];
++    CARD8 value;
++
++    n = 12;
++    while (1) {
++        data[0] = 0x0e;         /* register number 7, status */
++        I2C_WriteRead(&(f->d), (I2CByte *) data, 1, &value, 1);
++        /* xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++           "MT2032: LO1LK=%d LO2LK=%d\n",
++           (value & 0x04)>>2, (value & 0x02)>>1); */
++        if ((value & 6) == 6)
++            break;
++        usleep(1500);
++        n--;
++        if (n < 0)
++            break;
++    }
++    if (n < 0) {
++        xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++                   "MT2032: failed to set frequency\n");
++        return 0;
++    }
++    return 1;
++}
++
++static void
++MT2032_implement_settings(FI1236Ptr f, MT2032_parameters * m)
++{
++    CARD8 data[10];
++    CARD8 value;
++
++    data[0] = 0x00;             /* start with register 0x00 */
++    data[1] = (m->LO1I >> 3) - 1;
++    data[2] = (m->SEL << 4) | (m->LO1I & 0x7);
++    data[3] = 0x86;
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 4, NULL, 0);
++
++    data[0] = 0x05;             /* start with register 0x05 */
++    data[1] = ((m->LO2I & 0x7) << 5) | ((m->LO2I >> 3) - 1);
++    if (m->f_rf < 400.0)
++        data[2] = 0xe4;
++    else
++        data[2] = 0xf4;
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 3, NULL, 0);
++
++    data[0] = 0x07;             /* register number 7, control byte 2 */
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 1, &value, 1);
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "MT2032: using XOGC=%d\n", (value & 0x07));
++    data[1] = 8 | (value & 0x7);
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 2, NULL, 0);
++
++    data[0] = 0x0b;             /* start with register 0x0b */
++    data[1] = m->NUM & 0xff;
++    data[2] = (1 << 7) | ((m->NUM >> 8) & 0x0f);
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 3, NULL, 0);
++
++    MT2032_wait_for_lock(f);
++}
++
++static void
++MT2032_optimize_VCO(FI1236Ptr f, MT2032_parameters * m)
++{
++    CARD8 data[10];
++    CARD8 value;
++    CARD8 TAD1;
++
++    data[0] = 0x0f;             /* register number 7, status */
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 1, &value, 1);
++    TAD1 = value & 0x07;
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "MT2032: TAD1=%d SEL=%d\n", TAD1, m->SEL);
++    if (TAD1 < 2)
++        return;
++    if (TAD1 == 2) {
++        if (m->SEL == 0)
++            return;
++        m->SEL--;
++    }
++    else {
++        if (m->SEL >= 4)
++            return;
++        m->SEL++;
++    }
++    data[0] = 0x01;             /* start with register 1 */
++    data[1] = (m->SEL << 4) | (m->LO1I & 0x7);
++    I2C_WriteRead(&(f->d), (I2CByte *) data, 2, NULL, 0);
++
++}
++
++static int
++FI1236_get_afc_hint(FI1236Ptr f)
++{
++    CARD8 out;
++    CARD8 AFC;
++
++    if ((f->type == TUNER_TYPE_FM1216ME) || (f->type == TUNER_TYPE_FI1236W)) {
++        TDA9885Ptr t = (TDA9885Ptr) f->afc_source;
++
++        if (t == NULL)
++            return TUNER_OFF;
++
++        tda9885_getstatus(t);
++        tda9885_dumpstatus(t);
++        AFC = t->afc_status & 0x0f;
++
++        xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++                   "AFC: FI1236_get_afc_hint: %i\n", AFC);
++        if (AFC == 0)
++            return TUNER_TUNED;
++        else if (AFC <= 0x07)
++            return TUNER_JUST_BELOW;
++        else if (AFC < 0x0f)
++            return TUNER_JUST_ABOVE;
++        else if (AFC == 0x0f)
++            return TUNER_TUNED;
++    }
++    else {
++        I2C_WriteRead(&(f->d), NULL, 0, &out, 1);
++        AFC = out & 0x7;
++        xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++                   "AFC: FI1236_get_afc_hint: %i\n", AFC);
++        if (AFC == 2)
++            return TUNER_TUNED;
++        if (AFC == 3)
++            return TUNER_JUST_BELOW;
++        if (AFC == 1)
++            return TUNER_JUST_ABOVE;
++        return TUNER_OFF;
++    }
++    return TUNER_OFF;
++}
++
++static int
++MT2032_get_afc_hint(FI1236Ptr f)
++{
++    CARD8 in;
++    CARD8 out[2];
++    CARD8 AFC;
++
++    in = 0x0e;
++    I2C_WriteRead(&(f->d), (I2CByte *) &in, 1, out, 2);
++    AFC = (out[0] >> 4) & 0x7;
++#if 0
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO, "AFC=%d TAD1=%d TAD2=%d\n",
++               AFC, out[1] & 0x7, (out[1] >> 4) & 0x07);
++#endif
++    if (AFC == 2)
++        return TUNER_TUNED;
++    if (AFC == 3)
++        return TUNER_JUST_BELOW;
++    if (AFC == 1)
++        return TUNER_JUST_ABOVE;
++    return TUNER_OFF;
++}
++
++/* this function is for external use only */
++int
++TUNER_get_afc_hint(FI1236Ptr f)
++{
++    if (f->afc_timer_installed)
++        return TUNER_STILL_TUNING;
++    return f->last_afc_hint;
++}
++
++static void
++MT2032_dump_status(FI1236Ptr f)
++{
++    CARD8 in;
++    CARD8 out[2];
++    CARD8 AFC;
++    CARD8 LDONrb;
++    CARD8 LO1LK, LO2LK, XOK;
++    CARD8 TAD2, TAD1;
++
++    in = 0x0e;
++    I2C_WriteRead(&(f->d), (I2CByte *) &in, 1, out, 2);
++    XOK = out[0] & 1;
++    LO1LK = (out[0] >> 2) & 1;
++    LO2LK = (out[0] >> 1) & 1;
++    LDONrb = (out[0] >> 3) & 1;
++
++    AFC = (out[0] >> 4) & 0x7;
++
++    TAD1 = (out[1] & 0x7);
++    TAD2 = (out[1] >> 4) & 0x7;
++
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "MT2032: status: XOK=%d LO1LK=%d LO2LK=%d LDONrb=%d AFC=%d TAD1=%d TAD2=%d\n",
++               XOK, LO1LK, LO2LK, LDONrb, AFC, TAD1, TAD2);
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "MT2032: status: OSCILLATOR:%s PLL1:%s PLL2:%s\n",
++               XOK ? "ok" : "off",
++               LO1LK ? "locked" : "off", LO2LK ? "locked" : "off");
++
++}
++
++static void
++MT2032_tune(FI1236Ptr f, double freq, double step)
++{
++    MT2032_parameters m;
++    CARD8 data[10];
++    int i;
++
++    /* NTSC IF is 44mhz.. but 733/16=45.8125 and all TDAXXXX docs mention
++       45.75, 39, 58.75 and 30. */
++#if 0
++    MT2032_calculate_register_settings(&m, freq, 1090.0, 45.125, 5.25, 6.0,
++                                       step);
++    MT2032_calculate_register_settings(&m, freq, 1090.0, 45.74, 5.25, 6.0,
++                                       step);
++#endif
++    MT2032_calculate_register_settings(&m, freq, 1090.0, f->video_if, 5.25, 3.0,
++                                       step);
++    MT2032_dump_parameters(f, &m);
++    MT2032_implement_settings(f, &m);
++    /* MT2032_dump_parameters(f, &m); */
++    for (i = 0; i < 3; i++) {
++        MT2032_optimize_VCO(f, &m);
++        if (MT2032_wait_for_lock(f)) {
++            data[0] = 0x02;     /* LO Gain control register 0x02 */
++            data[1] = 0x20;
++            I2C_WriteRead(&(f->d), (I2CByte *) data, 2, NULL, 0);
++            return;
++        }
++        data[0] = 0x07;
++        data[1] = 0x88 | f->xogc;
++        I2C_WriteRead(&(f->d), (I2CByte *) data, 2, NULL, 0);
++        usleep(15000);
++        data[1] = 0x08 | f->xogc;
++        I2C_WriteRead(&(f->d), (I2CByte *) data, 2, NULL, 0);
++    }
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "MT2032: failed to set frequency\n");
++}
++
++void
++FI1236_set_tuner_type(FI1236Ptr f, int type)
++{
++    f->type = type;
++    if (type >= NUM_TUNERS)
++        type = NUM_TUNERS - 1;
++    if (type < 0)
++        type = 0;
++    memcpy(&(f->parm), &(tuner_parms[type]), sizeof(FI1236_parameters));
++    f->original_frequency = f->parm.min_freq;
++    f->afc_delta = 0;
++    if (type == TUNER_TYPE_MT2032) {
++        MT2032_init(f);
++        return;
++    }
++}
++
++static CARD32
++AFC_TimerCallback(OsTimerPtr timer, CARD32 time, void *data)
++{
++    FI1236Ptr f = (FI1236Ptr) data;
++
++    if (FI1236_AFC(f))
++        return 150;
++    else {
++        f->afc_timer_installed = FALSE;
++        f->afc_count = 0;
++        return 0;
++    }
++}
++
++void
++FI1236_tune(FI1236Ptr f, CARD32 frequency)
++{
++    CARD16 divider;
++    CARD8 data;
++
++    if (frequency < f->parm.min_freq)
++        frequency = f->parm.min_freq;
++    if (frequency > f->parm.max_freq)
++        frequency = f->parm.max_freq;
++
++    divider = (f->parm.fcar + (CARD16) frequency) & 0x7fff;
++    f->tuner_data.div1 = (CARD8) ((divider >> 8) & 0x7f);
++    f->tuner_data.div2 = (CARD8) (divider & 0xff);
++    f->tuner_data.control = f->parm.control;
++
++    if (frequency < f->parm.threshold1)
++        f->tuner_data.band = f->parm.band_low;
++    else if (frequency < f->parm.threshold2)
++        f->tuner_data.band = f->parm.band_mid;
++    else
++        f->tuner_data.band = f->parm.band_high;
++
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "Setting tuner band to %d\n", f->tuner_data.band);
++
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "Setting tuner frequency to %d\n", (int) frequency);
++
++    if ((f->type == TUNER_TYPE_FM1216ME) || (f->type == TUNER_TYPE_FI1236W)) {
++        f->tuner_data.aux = 0x20;
++        I2C_WriteRead(&(f->d), (I2CByte *) &(f->tuner_data), 5, NULL, 0);
++        I2C_WriteRead(&(f->d), NULL, 0, &data, 1);
++        xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO, "Tuner status %x\n", data);
++    }
++    else
++        I2C_WriteRead(&(f->d), (I2CByte *) &(f->tuner_data), 4, NULL, 0);
++}
++
++void
++TUNER_set_frequency(FI1236Ptr f, CARD32 frequency)
++{
++    if (frequency < f->parm.min_freq)
++        frequency = f->parm.min_freq;
++    if (frequency > f->parm.max_freq)
++        frequency = f->parm.max_freq;
++
++    f->afc_delta = 0;
++    f->original_frequency = frequency;
++
++    if (f->type == TUNER_TYPE_MT2032)
++        MT2032_tune(f, (1.0 * frequency) / 16.0, 0.0625);
++    else
++        FI1236_tune(f, frequency);
++
++    if (!f->afc_timer_installed) {
++        f->afc_timer_installed = TRUE;
++/*      RegisterBlockAndWakeupHandlers(FI1236_BlockHandler, AFCWakeup, f); */
++        TimerSet(NULL, 0, 300, AFC_TimerCallback, f);
++    }
++
++}
++
++int
++FI1236_AFC(FI1236Ptr f)
++{
++#if 0
++    xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++               "AFC: f=%p f->count=%d f->original_frequency=%d f->afc_delta=%d\n",
++               f, f->afc_count, f->original_frequency, f->afc_delta);
++#endif
++    f->afc_count++;
++    if (f->type == TUNER_TYPE_MT2032) {
++        f->last_afc_hint = MT2032_get_afc_hint(f);
++        xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++                   "AFC: afc_hint=%d\n", f->last_afc_hint);
++        if (f->last_afc_hint == TUNER_TUNED)
++            return 0;
++        if (f->afc_count > 3)
++            f->last_afc_hint = TUNER_OFF;
++        if (f->last_afc_hint == TUNER_OFF)
++            f->afc_delta = 0;
++        else
++            f->afc_delta += f->last_afc_hint;
++
++        xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++                   "AFC: Setting tuner frequency to %g\n",
++                   (0.5 * (2 * f->original_frequency + f->afc_delta)) / 16.0);
++        MT2032_tune(f,
++                    (1.0 * f->original_frequency + 0.5 * f->afc_delta) / 16.0,
++                    0.03125);
++        if (f->last_afc_hint == TUNER_OFF)
++            return 0;
++        return 1;               /* call me again */
++    }
++    else {
++        f->last_afc_hint = FI1236_get_afc_hint(f);
++        if (f->last_afc_hint == TUNER_TUNED) {
++            xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO, "AFC: TUNER_TUNNED\n");
++            return 0;
++        }
++        if (f->afc_count > 3)
++            f->last_afc_hint = TUNER_OFF;
++
++        if (f->last_afc_hint == TUNER_OFF)
++            f->afc_delta = 0;
++        else
++            f->afc_delta += f->last_afc_hint;
++
++        xf86DrvMsg(f->d.pI2CBus->scrnIndex, X_INFO,
++                   "AFC: Setting tuner frequency to %g\n",
++                   (0.5 * (2 * f->original_frequency + f->afc_delta)) / 16.0);
++        FI1236_tune(f, f->original_frequency + f->afc_delta);
++        if (f->last_afc_hint == TUNER_OFF)
++            return 0;
++        return 1;               /* call me again */
++    }
++    return 0;                   /* done */
++}
++
++void
++fi1236_dump_status(FI1236Ptr f)
++{
++    if (f->type == TUNER_TYPE_MT2032)
++        MT2032_dump_status(f);
++}
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/fi1236.h
+@@ -0,0 +1,113 @@
++#ifndef __FI1236_H__
++#define __FI1236_H__
++
++#include "xf86i2c.h"
++
++/* why someone has defined NUM someplace else is beyoung me.. */
++#undef NUM
++
++typedef struct {
++    CARD32 fcar;                /* 16 * fcar_Mhz */
++    CARD32 min_freq;            /* 16 * min_freq_Mhz */
++    CARD32 max_freq;            /* 16 * max_freq_Mhz */
++
++    CARD32 threshold1;          /* 16 * Value_Mhz */
++    CARD32 threshold2;          /* 16 * Value_Mhz */
++
++    CARD8 band_low;
++    CARD8 band_mid;
++    CARD8 band_high;
++    CARD8 control;
++} FI1236_parameters;
++
++typedef struct {
++    /* what we want */
++    /* all frequencies are in Mhz */
++    double f_rf;                /* frequency to tune to */
++    double f_if1;               /* first intermediate frequency */
++    double f_if2;               /* second intermediate frequency */
++    double f_ref;               /* reference frequency */
++    double f_ifbw;              /* bandwidth */
++    double f_step;              /* step */
++
++    /* what we compute */
++    double f_lo1;
++    double f_lo2;
++    int LO1I;
++    int LO2I;
++    int SEL;
++    int STEP;
++    int NUM;
++} MT2032_parameters;
++
++typedef struct {
++    I2CDevRec d;
++    int type;
++
++    void *afc_source;           /* The AFC source may be another chip like TDA988x */
++
++    int afc_delta;
++    CARD32 original_frequency;
++    Bool afc_timer_installed;
++    int afc_count;
++    int last_afc_hint;
++
++    double video_if;
++    FI1236_parameters parm;
++    int xogc;                   /* for MT2032 */
++
++    struct {
++        CARD8 div1;
++        CARD8 div2;
++        CARD8 control;
++        CARD8 band;
++        CARD8 aux;              /* this is for MK3 tuners */
++    } tuner_data;
++} FI1236Rec, *FI1236Ptr;
++
++#define TUNER_TYPE_FI1236              0
++#define TUNER_TYPE_FI1216              1
++#define TUNER_TYPE_TEMIC_FN5AL         2
++#define TUNER_TYPE_MT2032	       3
++#define TUNER_TYPE_FI1246              4
++#define TUNER_TYPE_FI1256              5
++#define TUNER_TYPE_FI1236W             6
++#define TUNER_TYPE_FM1216ME            7
++
++#define FI1236_ADDR(a)        ((a)->d.SlaveAddr)
++
++#define FI1236_ADDR_1	     0xC6
++#define FI1236_ADDR_2        0xC0
++
++#define TUNER_TUNED   0
++#define TUNER_JUST_BELOW 1
++#define TUNER_JUST_ABOVE -1
++#define TUNER_OFF      4
++#define TUNER_STILL_TUNING      5
++
++void FI1236_tune(FI1236Ptr f, CARD32 frequency);
++
++#define FI1236SymbolsList  \
++		"Detect_FI1236", \
++		"FI1236_set_tuner_type", \
++		"TUNER_set_frequency"
++
++#define xf86_Detect_FI1236		Detect_FI1236
++extern _X_EXPORT FI1236Ptr Detect_FI1236(I2CBusPtr b, I2CSlaveAddr addr);
++
++#define xf86_FI1236_set_tuner_type	FI1236_set_tuner_type
++extern _X_EXPORT void FI1236_set_tuner_type(FI1236Ptr f, int type);
++
++#define xf86_TUNER_set_frequency	TUNER_set_frequency
++extern _X_EXPORT void TUNER_set_frequency(FI1236Ptr f, CARD32 frequency);
++
++#define xf86_FI1236_AFC			FI1236_AFC
++extern _X_EXPORT int FI1236_AFC(FI1236Ptr f);
++
++#define xf86_TUNER_get_afc_hint		TUNER_get_afc_hint
++extern _X_EXPORT int TUNER_get_afc_hint(FI1236Ptr f);
++
++#define xf86_fi1236_dump_status		fi1236_dump_status
++extern _X_EXPORT void fi1236_dump_status(FI1236Ptr f);
++
++#endif
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/fi1236_module.c
+@@ -0,0 +1,24 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86Module.h"
++
++static XF86ModuleVersionInfo fi1236VersRec = {
++    "fi1236",
++    MODULEVENDORSTRING,
++    MODINFOSTRING1,
++    MODINFOSTRING2,
++    XORG_VERSION_CURRENT,
++    1, 0, 0,
++    ABI_CLASS_VIDEODRV,         /* This needs the video driver ABI */
++    ABI_VIDEODRV_VERSION,
++    MOD_CLASS_NONE,
++    {0, 0, 0, 0}
++};
++
++_X_EXPORT XF86ModuleData fi1236ModuleData = {
++    &fi1236VersRec,
++    NULL,
++    NULL
++};
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/msp3430.c
+@@ -0,0 +1,779 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include <string.h>
++#include <unistd.h>
++
++#include "xf86.h"
++#include "xf86i2c.h"
++#include "msp3430.h"
++#include "i2c_def.h"
++
++#define CONTROL         0x00
++#define WR_DEM          0x10
++#define RD_DEM          0x11
++#define WR_DSP          0x12
++#define RD_DSP          0x13
++
++void InitMSP34xxG(MSP3430Ptr m);
++void InitMSP34x5D(MSP3430Ptr m);
++void CheckModeMSP34x5D(MSP3430Ptr m);
++static const char *MSP_getProductName(CARD16 product_id);
++void mpause(int milliseconds);
++
++#define __MSPDEBUG__	0
++
++#if __MSPDEBUG__ > 3
++
++void MSPBeep(MSP3430Ptr m, CARD8 freq);
++
++#define __MSPBEEP MSPBeep(m,0x14);
++
++#else
++
++#define __MSPBEEP
++#endif
++
++static void
++SetMSP3430Control(MSP3430Ptr m, CARD8 RegAddress, CARD8 RegValueHigh,
++                  CARD8 RegValueLow)
++{
++    I2CByte data[3];
++
++    data[0] = RegAddress;
++    data[1] = RegValueHigh;
++    data[2] = RegValueLow;
++
++    I2C_WriteRead(&(m->d), data, 3, NULL, 0);
++}
++
++static void
++SetMSP3430Data(MSP3430Ptr m, CARD8 RegAddress, CARD8 RegSubAddressHigh,
++               CARD8 RegSubAddressLow, CARD8 RegValueHigh, CARD8 RegValueLow)
++{
++    I2CByte data[5];
++
++#ifdef MSP_DEBUG
++    if (!m->registers_present[RegSubAddressLow]) {
++        xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_ERROR,
++                   "Attempt to access non-existent register in MSP34xxX: 0x%02x 0x%02x 0x%02x <- 0x%02x 0x%02x\n",
++                   RegAddress, RegSubAddressHigh, RegSubAddressLow,
++                   RegValueHigh, RegValueLow);
++    }
++#endif
++
++    data[0] = RegAddress;
++    data[1] = RegSubAddressHigh;
++    data[2] = RegSubAddressLow;
++    data[3] = RegValueHigh;
++    data[4] = RegValueLow;
++
++    I2C_WriteRead(&(m->d), data, 5, NULL, 0);
++}
++
++static void
++GetMSP3430Data(MSP3430Ptr m, CARD8 RegAddress, CARD8 RegSubAddressHigh,
++               CARD8 RegSubAddressLow, CARD8 *RegValueHigh, CARD8 *RegValueLow)
++{
++    I2CByte send[3];
++    I2CByte receive[2];
++
++    send[0] = RegAddress;
++    send[1] = RegSubAddressHigh;
++    send[2] = RegSubAddressLow;
++
++    I2C_WriteRead(&(m->d), send, 3, receive, 2);
++
++    *RegValueHigh = receive[0];
++    *RegValueLow = receive[1];
++}
++
++#if __MSPDEBUG__ > 2
++static void
++MSP3430DumpStatus(MSP3430Ptr m)
++{
++    CARD8 status_hi, status_lo;
++    CARD8 subaddr, data[2];
++
++    GetMSP3430Data(m, RD_DEM, 0x02, 0x00, &status_hi, &status_lo);
++    xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO,
++               "MSP34xx: SAP(8)=%d mono/NICAM(7)=%d stereo=%d %s O_1=%d O_0=%d 2nd car=%d 1st car=%d\n",
++               status_hi & 1, (status_lo >> 7) & 1, (status_lo >> 6) & 1,
++               (status_lo >> 5) ? ((status_hi >> 1) & 1 ? "bad NICAM reception"
++                                   : "NICAM") : ((status_hi >> 1) & 1 ? "bogus"
++                                                 : "ANALOG FM/AM"),
++               (status_lo >> 4) & 1, (status_lo >> 3) & 1,
++               !((status_lo >> 2) & 1), !((status_lo >> 1) & 1));
++
++    GetMSP3430Data(m, RD_DEM, 0x00, 0x7E, &status_hi, &status_lo);
++    xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO,
++               "MSP34xx: standard result=0x%02x%02x\n", status_hi, status_lo);
++    subaddr = 0x0;
++    I2C_WriteRead(&(m->d), &subaddr, 1, data, 2);
++    xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO, "MSP34xx: control=0x%02x%02x\n",
++               data[1], data[0]);
++}
++#endif
++
++/* wrapper */
++void
++InitMSP3430(MSP3430Ptr m)
++{
++#if __MSPDEBUG__ > 1
++    xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO,
++               "InitMSP3430(m->connector=%d, m->standard=%d, m->chip_family=%d)\n",
++               m->connector, m->standard, m->chip_family);
++#endif
++    switch (m->chip_family) {
++    case MSPFAMILY_34x0G:
++        InitMSP34xxG(m);
++        break;
++    case MSPFAMILY_34x5G:
++        InitMSP34xxG(m);
++        break;
++    case MSPFAMILY_34x5D:
++        InitMSP34x5D(m);
++        break;
++    }
++}
++
++/*-----------------------------------------------------------------
++| common functions for all MSP34xx chips 
++|----------------------------------------------------------------*/
++
++MSP3430Ptr
++DetectMSP3430(I2CBusPtr b, I2CSlaveAddr addr)
++{
++    MSP3430Ptr m;
++    I2CByte a;
++    CARD8 hardware_version, major_revision, product_code, rom_version;
++    Bool supported;
++
++    m = calloc(1, sizeof(MSP3430Rec));
++    if (m == NULL)
++        return NULL;
++    m->d.DevName = strdup("MSP34xx");
++    m->d.SlaveAddr = addr;
++    m->d.pI2CBus = b;
++    m->d.NextDev = NULL;
++    m->d.StartTimeout = b->StartTimeout;
++    m->d.BitTimeout = b->BitTimeout;
++    m->d.AcknTimeout = b->AcknTimeout;
++    m->d.ByteTimeout = b->ByteTimeout;
++
++    if (!I2C_WriteRead(&(m->d), NULL, 0, &a, 1)) {
++        free((void *) m->d.DevName);
++        free(m);
++        return NULL;
++    }
++
++    m->standard = MSP3430_NTSC;
++    m->connector = MSP3430_CONNECTOR_1;
++    m->mode = MSPMODE_STEREO_A; /*stereo or chanel A if avail. */
++    m->c_format = MSPFORMAT_UNKNOWN;
++    m->c_standard = MSPSTANDARD_UNKNOWN;
++    m->c_matrix = m->c_fmmatrix = m->c_source = 0;
++    m->volume = 0;
++    m->recheck = FALSE;
++
++    GetMSP3430Data(m, RD_DSP, 0x00, 0x1E, &hardware_version, &major_revision);
++    GetMSP3430Data(m, RD_DSP, 0x00, 0x1F, &product_code, &rom_version);
++    m->hardware_version = hardware_version;
++    m->major_revision = major_revision;
++    m->product_code = product_code;
++    m->rom_version = rom_version;
++
++    m->chip_id = ((major_revision << 8) | product_code);
++
++    supported = FALSE;
++    switch (major_revision) {
++    case 4:                    /* 34xxD */
++        switch (product_code) {
++        case 0x05:             /* 3405D */
++        case 0x0A:             /* 3410D */
++        case 0x0F:             /* 3415D */
++            m->chip_family = MSPFAMILY_34x5D;
++            m->recheck = TRUE;
++            supported = TRUE;
++            break;
++        default:
++            m->chip_family = MSPFAMILY_34x0D;
++        }
++        break;
++    case 7:                    /* 34xxG */
++        switch (product_code) {
++        case 0x00:
++        case 0x0A:
++        case 0x1E:
++        case 0x28:
++        case 0x32:
++            m->chip_family = MSPFAMILY_34x0G;
++            supported = TRUE;
++            break;
++        case 0x0f:
++        case 0x19:
++        case 0x2d:
++        case 0x37:
++        case 0x41:
++            m->chip_family = MSPFAMILY_34x5G;
++            supported = TRUE;
++#ifdef MSP_DEBUG
++            memset(m->registers_present, 0, 256);
++#define A(num) m->registers_present[(num)]=1;
++#define B(num1, num2) memset(&(m->registers_present[num1]), 1, num2-num1);
++            A(0x20)
++                A(0x30)
++                A(0x40)
++                A(0x00)
++                B(0x01, 0x08)
++                B(0x0B, 0x0E)
++                A(0x10)
++                B(0x12, 0x14)
++                A(0x16)
++                A(0x29)
++#undef B
++#undef A
++#endif
++                break;
++        default:
++            m->chip_family = MSPFAMILY_UNKNOWN;
++        }
++        break;
++    default:
++        m->chip_family = MSPFAMILY_UNKNOWN;
++    }
++
++    xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO,
++               "Found %s%s, rom version 0x%02x, chip_id=0x%04x\n",
++               MSP_getProductName(m->chip_id),
++               supported ? "" : " (unsupported)", rom_version, m->chip_id);
++
++    if (!supported) {
++        free((void *) m->d.DevName);
++        free(m);
++        return NULL;
++    }
++    if (!I2CDevInit(&(m->d))) {
++        free((void *) m->d.DevName);
++        free(m);
++        return NULL;
++    }
++
++    return m;
++}
++
++void
++ResetMSP3430(MSP3430Ptr m)
++{
++    /* Reset the MSP3430 */
++    SetMSP3430Control(m, 0x00, 0x80, 0x00);
++    /* Set it back to normal operation */
++    SetMSP3430Control(m, 0x00, 0x00, 0x00);
++
++    m->c_format = MSPFORMAT_UNKNOWN;
++    m->c_standard = MSPSTANDARD_UNKNOWN;
++    m->c_matrix = m->c_fmmatrix = m->c_source = 0;
++    m->volume = 0;
++}
++
++void
++MSP3430SetVolume(MSP3430Ptr m, CARD8 value)
++{
++    CARD8 result;
++
++#if 0
++    CARD8 old_volume;
++
++    GetMSP3430Data(m, RD_DSP, 0x00, 0x00, &old_volume, &result);
++    xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO, "MSP3430 result 0x%02x\n",
++               result);
++#endif
++    /* save an extra Get call */
++    result = 0;
++
++    SetMSP3430Data(m, WR_DSP, 0x00, 0x00, value, result);
++
++    SetMSP3430Data(m, WR_DSP, 0x00, 0x07, value, 0);
++    m->volume = value;
++
++#if __MSPDEBUG__ > 2
++    MSP3430DumpStatus(m);
++    __MSPBEEP GetMSP3430Data(m, RD_DSP, 0x00, 0x00, &old_volume, &result);
++    xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO, "MSP3430 volume 0x%02x\n",
++               value);
++#endif
++}
++
++void
++MSP3430SetSAP(MSP3430Ptr m, int mode)
++{
++    xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO,
++               "Put actual code to change SAP here\n");
++
++    SetMSP3430Data(m, WR_DSP, 0x00, 0x08, mode & 0xff, 0x20);
++}
++
++#if 0
++void
++MSP3430SetSource(MSP3430Ptr m, CARD8 value)
++{
++    /* Write to DSP, register 0x0008, (loudspeaker channel source/matrix) */
++    /* This sets the source to the TV tuner, for stereo operation */
++    SetMSP3430Data(m, WR_DSP, 0x00, 0x08, value, 0x20);
++}
++#endif
++
++static const char *
++MSP_getProductName(CARD16 product_id)
++{
++    switch (product_id) {
++    case 0x0400:
++        return "MSP3400D";
++    case 0x040a:
++        return "MSP3410D";
++    case 0x0405:
++        return "MSP3405D";
++    case 0x040f:
++        return "MSP3415D";
++    case 0x0700:
++        return "MSP3400G";
++    case 0x070a:
++        return "MSP3410G";
++    case 0x071e:
++        return "MSP3430G";
++    case 0x0728:
++        return "MSP3440G";
++    case 0x0732:
++        return "MSP3450G";
++    case 0x070f:
++        return "MSP3415G";
++    case 0x0719:
++        return "MSP3425G";
++    case 0x072d:
++        return "MSP3445G";
++    case 0x0737:
++        return "MSP3455G";
++    case 0x0741:
++        return "MSP3465G";
++    }
++    return "MSP - unknown type";
++}
++
++#if __MSPDEBUG__ > 2
++/*puts beep in MSP output
++    freq = 0x01 - 16Hz ... 0x40 - 1kHz ... 0xff - 4kHz  
++*/
++void
++MSPBeep(MSP3430Ptr m, CARD8 freq)
++{
++    SetMSP3430Data(m, WR_DSP, 0x00, freq, 0x7f, 0x40);
++    mpause(100);
++    SetMSP3430Data(m, WR_DSP, 0x00, 0x14, 0x00, 0x00);
++}
++#endif
++
++void
++mpause(int milliseconds)
++{
++    int i, m;
++
++    m = milliseconds / 20;
++    for (i = 0; i < m; i++)
++        usleep(20000);
++}
++
++/*-----------------------------------------------------------------
++| specific functions for all MSP34xxG chips 
++|----------------------------------------------------------------*/
++
++void
++InitMSP34xxG(MSP3430Ptr m)
++{
++
++#if __MSPDEBUG__ > 1
++    xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO,
++               "InitMSP34xxG(m->connector=%d, m->standard=%d, m->chip_family=%d)\n",
++               m->connector, m->standard, m->chip_family);
++#endif
++    /* Reset MSP3430 */
++    SetMSP3430Control(m, 0x00, 0x80, 0x00);
++    /* Set it back to normal operation */
++    SetMSP3430Control(m, 0x00, 0x00, 0x00);
++
++    /*set MODUS register */
++    /* bits: 0 - automatic sound detection */
++    /*       1 - enable STATUS change */
++    /*       12 - detect 6.5 Mhz carrier as D/K1, D/K2 or D/K NICAM  (does not seem to work ) */
++    /*       13 - detect 4.5 Mhz carrier as BTSC */
++    if ((m->standard & 0xff) == MSP3430_PAL) {
++        SetMSP3430Data(m, WR_DEM, 0x00, 0x30, 0x30, 0x03 | 0x08);       /* make O_ pins tristate */
++        /* PAL standard */
++        SetMSP3430Data(m, WR_DEM, 0x00, 0x20, 0x00, 0x01);      /* possibly wrong */
++    }
++    else {
++        SetMSP3430Data(m, WR_DEM, 0x00, 0x30, 0x20, 0x03 | 0x08);
++        /* standard selection is M-BTSC-Stereo */
++        SetMSP3430Data(m, WR_DEM, 0x00, 0x20, 0x00, 0x20);
++    }
++
++    switch (m->connector) {
++    case MSP3430_CONNECTOR_1:
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x08, 0x03, 0x20);
++        break;
++    case MSP3430_CONNECTOR_2:
++        /* this has not been checked yet.. could be bogus */
++        /* SCART Input Prescale: 0 dB gain */
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x0d, 0x19, 0x00);
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x08, 0x02, 0x20);
++        break;
++    case MSP3430_CONNECTOR_3:
++    default:
++        /* SCART Input Prescale: 0 dB gain */
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x0d, 0x19, 0x00);
++
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x08, 0x02, 0x20);
++        break;
++    }
++
++    switch (m->standard) {
++    case MSP3430_PAL:
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x0e, 0x24, 0x03);
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x10, 0x00, 0x5a);
++        SetMSP3430Data(m, WR_DEM, 0x00, 0x20, 0x00, 0x03);
++        /* Set volume to FAST_MUTE. */
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x00, 0xFF, 0x00);
++        break;
++    case MSP3430_PAL_DK1:
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x0e, 0x24, 0x03);
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x10, 0x00, 0x5a);
++        SetMSP3430Data(m, WR_DEM, 0x00, 0x20, 0x00, 0x04);
++        /* Set volume to FAST_MUTE. */
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x00, 0xFF, 0x00);
++        break;
++    case MSP3430_SECAM:        /* is this right ? */
++    case MSP3430_NTSC:
++        /* Write to DSP, register 0x000E, (prescale FM/FM matrix) */
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x0e, 0x24, 0x03);
++
++        /* Set volume to FAST_MUTE. */
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x00, 0xFF, 0x00);
++        break;
++    }
++
++}
++
++/*-----------------------------------------------------------------
++| specific functions for all MSP34x5D chips 
++|----------------------------------------------------------------*/
++
++void
++InitMSP34x5D(MSP3430Ptr m)
++{
++    int count;
++    CARD8 high, low;
++    CARD16 result, standard;
++    CARD16 peak;
++
++    if (m->c_format == MSPFORMAT_UNKNOWN)
++        ResetMSP3430(m);
++    else {
++        /*mute volume */
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x00, 0x00, 0x00);
++    }
++
++    switch (m->connector) {
++    case MSP3430_CONNECTOR_2:
++    case MSP3430_CONNECTOR_3:
++        if (m->c_format != MSPFORMAT_SCART) {
++            /* SCART Input Prescale: 0 dB gain */
++            SetMSP3430Data(m, WR_DSP, 0x00, 0x0d, 0x19, 0x00);
++            /* this has not been checked yet.. could be bogus */
++            m->c_format = MSPFORMAT_SCART;      /*stereo */
++        }
++        break;
++    case MSP3430_CONNECTOR_1:
++    default:
++
++        switch (m->standard & 0x00ff) {
++        case MSP3430_PAL:
++            switch (m->standard) {
++            case MSP3430_PAL_DK1:
++                standard = MSPSTANDARD_FM_DK1;
++                break;
++/*			case MSP3430_PAL_DK2:
++			    standard=MSPSTANDARD_FM_DK2;
++			    break;
++			case MSP3430_PAL_BG:
++			may be FM stereo (Germany) or FM NICAM (Scandinavia,spain)
++			    standard=MSPSTANDARD_AUTO;
++			    break;
++*/
++            default:
++                standard = MSPSTANDARD_AUTO;
++            }
++            break;
++        case MSP3430_SECAM:
++            standard = MSPSTANDARD_AUTO;
++        case MSP3430_NTSC:
++            /* Only MSP34x5 supported format - Korean NTSC-M */
++            standard = MSPSTANDARD_FM_M;
++        default:
++            standard = MSPSTANDARD_AUTO;
++        }
++
++        /*no NICAM support in MSP3410D - force to autodetect */
++        if ((m->chip_id == 0x405) && (standard >= MSPSTANDARD_NICAM_BG))
++            standard = MSPSTANDARD_AUTO;
++
++        if (m->c_standard != standard) {
++
++            SetMSP3430Data(m, WR_DEM, 0x00, 0x20, standard >> 8,
++                           standard & 0xFF);
++            if (standard == MSPSTANDARD_AUTO) {
++                count = 50;     /* time shouldn't exceed 1s, just in case */
++                do {
++                    usleep(20000);
++                    GetMSP3430Data(m, RD_DEM, 0x00, 0x7e, &high, &low);
++                    result = (high << 8) | low;
++                    --count;
++                } while (result > 0x07ff && count > 0);
++
++                if ((result > MSPSTANDARD_AUTO))
++                    standard = result;
++                else
++                    standard = MSPSTANDARD_UNKNOWN;
++#if __MSPDEBUG__ > 1
++                xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO,
++                           "Detected audio standard: %d\n", result);
++#endif
++                /* result = MSPSTANDARD_NICAM_L can be one of:
++                   SECAM_L - MSPSTANDARD_NICAM_L
++                   D/K1 - MSPSTANDARD_FM_DK1
++                   D/K2 - MSPSTANDARD_FM_DK2
++                   D/K-NICAM - MSPSTANDARD_NICAM_DK */
++                if (standard == MSPSTANDARD_NICAM_L) {
++                    if ((m->standard & 0x00ff) == MSP3430_PAL) {
++                        /* force PAL D/K  */
++                        standard = MSPSTANDARD_FM_DK1;
++                        SetMSP3430Data(m, WR_DEM, 0x00, 0x20, standard >> 8,
++                                       standard & 0xFF);
++#if __MSPDEBUG__ > 1
++                        xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO,
++                                   "Detected 6.5MHz carrier - forced to D/K1 !!!\n");
++#endif
++                    }
++                }
++            }
++            m->c_standard = standard;
++        }                       /*end - standard changed */
++        else {
++            if (standard < MSPSTANDARD_NICAM_BG) {
++                /* get old value of ident. mode register */
++                GetMSP3430Data(m, RD_DSP, 0x00, 0x15, &high, &low);
++                /* reset Ident-Filter */
++                SetMSP3430Data(m, WR_DSP, 0x00, 0x14, 0x00, 0x3F);
++                /* put back old value to ident. mode register */
++                SetMSP3430Data(m, WR_DSP, 0x00, 0x14, 0x00, low);
++            }
++        }
++
++        if (standard <= MSPSTANDARD_AUTO) {
++            m->c_format = MSPFORMAT_1xFM;
++        }
++        else if (standard < MSPSTANDARD_NICAM_BG) {
++            /* set FM prescale */
++            SetMSP3430Data(m, WR_DSP, 0x00, 0x0e, 0x30, 0);
++            /* set FM deemphasis */
++            SetMSP3430Data(m, WR_DSP, 0x00, 0x0f,
++                           ((standard == MSPSTANDARD_FM_M) ? 0 : 1), 0);
++
++            /* check if FM2 carrier is present */
++            /*turn off FM DC Notch */
++            SetMSP3430Data(m, WR_DSP, 0x00, 0x17, 0x00, 0x3f);
++            /*matrix source for Quasi-Peak Detector - stereo: ch2->L ch1->R */
++            SetMSP3430Data(m, WR_DSP, 0x00, 0x0c, 0x00, 0x20);
++
++            mpause(250);
++            GetMSP3430Data(m, RD_DSP, 0x00, 0x1A, &high, &low);
++            peak = (high << 8) | low;
++#if __MSPDEBUG__ > 1
++            xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO,
++                       "Second carrier Quasi-Peak detection: %d\n", peak);
++#endif
++            /*turn on FM DC Notch */
++            SetMSP3430Data(m, WR_DSP, 0x00, 0x17, 0x00, 0x00);
++
++            if (peak < 5) {
++                /* if second carrier not detected - only mono from first carrier */
++                m->c_format = MSPFORMAT_1xFM;
++            }
++            else {
++                m->c_format = MSPFORMAT_2xFM;
++                /*start of FM identification process - FM_WAIT
++                   wait at least 0.5s - used 1s - gives beter resolution */
++                mpause(1000);
++            }
++        }
++        else {
++            if (standard == MSPSTANDARD_NICAM_L) {
++                m->c_format = MSPFORMAT_NICAM_AM;
++                /* set AM prescale */
++                SetMSP3430Data(m, WR_DSP, 0x00, 0x0e, 0x7C, 0);
++            }
++            else {
++                m->c_format = MSPFORMAT_NICAM_FM;
++                /* set FM prescale */
++                SetMSP3430Data(m, WR_DSP, 0x00, 0x0e, 0x30, 0);
++            }
++            /* set FM deemphasis */
++            SetMSP3430Data(m, WR_DSP, 0x00, 0x0f, 0x00, 0);
++            /* set NICAM prescale to 0dB */
++            SetMSP3430Data(m, WR_DSP, 0x00, 0x10, 0x20, 0);
++        }
++
++        break;
++    }                           /*end - case conector */
++
++    CheckModeMSP34x5D(m);
++
++    /* Set volume to FAST_MUTE. */
++    /*SetMSP3430Data(m, WR_DSP, 0x00, 0x00, 0xFF, 0x00); */
++    /*set volume */
++    MSP3430SetVolume(m, m->volume);
++
++__MSPBEEP}                      /* EnableMSP34x5D ()... */
++
++void
++CheckModeMSP34x5D(MSP3430Ptr m)
++{
++    const char stereo_on = 25;
++    const char stereo_off = 20;
++    const char dual_on = -stereo_on;
++    const char dual_off = -stereo_off;
++    char detect;
++    CARD8 matrix, fmmatrix, source, high, low;
++
++    fmmatrix = 0;               /*no matrix */
++    source = 0;
++    /*FM*/ switch (m->c_format) {
++    case MSPFORMAT_NICAM_FM:
++    case MSPFORMAT_NICAM_AM:
++    case MSPFORMAT_SCART:
++        source = ((m->c_format == MSPFORMAT_SCART) ? 2 : 1);
++        switch (m->mode) {
++        case MSPMODE_MONO:
++            matrix = 0x30;
++            /*MONO*/ break;
++        case MSPMODE_A:
++            matrix = 0x00;
++            /*A*/ break;
++        case MSPMODE_B:
++            matrix = 0x10;
++            /*B*/ break;
++        default:
++            matrix = 0x20;
++            /*STEREO*/ break;
++        }
++        break;
++    default:
++    case MSPFORMAT_1xFM:
++        matrix = 0x00;
++        /*A*/ break;
++    case MSPFORMAT_2xFM:
++        switch (m->mode) {
++        case MSPMODE_MONO:
++            matrix = 0x30;
++            /*MONO*/ break;
++        case MSPMODE_STEREO:
++            matrix = 0x20;
++            /*STEREO*/ fmmatrix = ((m->c_standard == MSPSTANDARD_FM_M) ? 2 : 1);
++            break;
++        case MSPMODE_AB:
++            matrix = 0x20;
++            /*STEREO*/ break;
++        case MSPMODE_A:
++            matrix = 0x00;
++            /*A*/ break;
++        case MSPMODE_B:
++            matrix = 0x10;
++            /*B*/ break;
++        default:
++            /*FM_IDENT_CHECK */
++            GetMSP3430Data(m, RD_DSP, 0x00, 0x18, &high, &low);
++            detect = (char) high;
++#if __MSPDEBUG__ > 1
++            xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO,
++                       "Stereo Detection Register: %d\n", detect);
++#endif
++            if (detect >=
++                ((m->c_mode == MSPMODE_STEREO) ? stereo_off : stereo_on)) {
++                m->c_mode = MSPMODE_STEREO;
++                matrix = 0x20;
++                /*STEREO*/
++                    fmmatrix = ((m->c_standard == MSPSTANDARD_FM_M) ? 2 : 1);
++            }
++            else if (detect <= ((m->c_mode == MSPMODE_AB) ? dual_off : dual_on)) {
++                m->c_mode = MSPMODE_AB;
++                switch (m->mode) {
++                case MSPMODE_STEREO_AB:
++                    matrix = 0x20;
++                    break;
++                case MSPMODE_STEREO_B:
++                    matrix = 0x10;
++                    break;
++                default:
++                case MSPMODE_A:
++                    matrix = 0x00;
++                    break;
++                }
++            }
++            else {
++                m->c_mode = MSPMODE_MONO;
++                matrix = 0x30;
++            /*MONO*/}
++            break;
++        }                       /* end - case mode */
++        break;
++    }
++
++    if (m->c_fmmatrix != fmmatrix) {
++        GetMSP3430Data(m, RD_DSP, 0x00, 0x0e, &high, &low);
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x0e, high, fmmatrix);
++        m->c_fmmatrix = fmmatrix;
++    }
++
++    if ((m->c_matrix != matrix) || (m->c_source != source)) {
++        /*set chanel source and matrix for loudspeaker */
++        SetMSP3430Data(m, WR_DSP, 0x00, 0x08, source, matrix);
++
++        m->c_matrix = matrix;
++        m->c_source = source;
++    }
++
++    if (((m->c_format) & 0xF0) == MSPFORMAT_NICAM)
++        SetMSP3430Data(m, WR_DEM, 0x00, 0x21, 0, 1);
++
++#if __MSPDEBUG__ > 0
++    char *msg;
++
++    switch (matrix) {
++    case 0x30:
++        /*MONO*/ msg = "MONO";
++        break;
++    case 0x00:
++        /*LEFT*/ msg = "MONO/CHANNEL_1";
++        break;
++    case 0x10:
++        /*RIGHT*/ msg = "MONO/CHANNEL_2";
++        break;
++    case 0x20:
++        /*LEFT*/ msg = "STEREO";
++        break;
++    default:
++        msg = "unknown";
++        break;
++    }
++    xf86DrvMsg(m->d.pI2CBus->scrnIndex, X_INFO, "Audio mode set to: %s\n", msg);
++#endif
++}
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/msp3430.h
+@@ -0,0 +1,116 @@
++#ifndef __MSP3430_H__
++#define __MSP3430_H__
++
++#include "xf86i2c.h"
++
++typedef struct {
++    I2CDevRec d;
++
++    int standard;
++    int connector;
++    int mode;
++
++    CARD8 hardware_version, major_revision, product_code, rom_version;
++#ifdef MSP_DEBUG
++    CARD8 registers_present[256];
++#endif
++
++    CARD16 chip_id;
++    CARD8 chip_family;
++    Bool recheck;               /*reinitialization needed after channel change */
++    CARD8 c_format;             /*current state of audio format */
++    CARD16 c_standard;          /*current state of standard register */
++    CARD8 c_source;             /*current state of source register */
++    CARD8 c_matrix;             /*current state of matrix register */
++    CARD8 c_fmmatrix;           /*current state of fmmatrix register */
++    int c_mode;                 /* current state of mode for autoswitchimg */
++    CARD8 volume;
++} MSP3430Rec, *MSP3430Ptr;
++
++#define MSP3430_ADDR_1      0x80
++#define MSP3430_ADDR_2		0x84
++#define MSP3430_ADDR_3		0x88
++
++#define MSP3430_PAL		1
++#define MSP3430_NTSC		2
++#define MSP3430_PAL_DK1         (0x100 | MSP3430_PAL)
++#define MSP3430_SECAM           3
++
++#define MSP3430_CONNECTOR_1     1       /* tuner on AIW cards */
++#define MSP3430_CONNECTOR_2     2       /* SVideo on AIW cards */
++#define MSP3430_CONNECTOR_3     3       /* composite on AIW cards */
++
++#define MSP3430_ADDR(a)         ((a)->d.SlaveAddr)
++
++#define MSP3430_FAST_MUTE	0xFF
++/* a handy volume transform function, -1000..1000 -> 0x01..0x7F */
++#define MSP3430_VOLUME(value) (0x01+(0x7F-0x01)*log(value+1001)/log(2001))
++
++/*----------------------------------------------------------*/
++
++/* MSP chip families */
++#define MSPFAMILY_UNKNOWN	0
++#define MSPFAMILY_34x0D		1
++#define MSPFAMILY_34x5D		2
++#define MSPFAMILY_34x0G		3
++#define MSPFAMILY_34x5G		4
++
++/* values for MSP standard */
++#define MSPSTANDARD_UNKNOWN	0x00
++#define MSPSTANDARD_AUTO	0x01
++#define MSPSTANDARD_FM_M	0x02
++#define MSPSTANDARD_FM_BG	0x03
++#define MSPSTANDARD_FM_DK1	0x04
++#define MSPSTANDARD_FM_DK2	0x04
++#define MSPSTANDARD_NICAM_BG	0x08
++#define MSPSTANDARD_NICAM_L	0x09
++#define MSPSTANDARD_NICAM_I	0x0A
++#define MSPSTANDARD_NICAM_DK	0x0B
++
++/* values for MSP format */
++#define MSPFORMAT_UNKNOWN	0x00
++#define MSPFORMAT_FM		0x10
++#define MSPFORMAT_1xFM		0x00|MSPFORMAT_FM
++#define MSPFORMAT_2xFM		0x01|MSPFORMAT_FM
++#define MSPFORMAT_NICAM		0x20
++#define MSPFORMAT_NICAM_FM	0x00|MSPFORMAT_NICAM
++#define MSPFORMAT_NICAM_AM	0x01|MSPFORMAT_NICAM
++#define MSPFORMAT_SCART		0x30
++
++/* values for MSP mode */
++#define MSPMODE_UNKNOWN		0
++/* automatic modes */
++#define MSPMODE_STEREO_AB	1
++#define MSPMODE_STEREO_A	2
++#define MSPMODE_STEREO_B	3
++/* forced modes */
++#define MSPMODE_MONO		4
++#define MSPMODE_STEREO		5
++#define MSPMODE_AB			6
++#define MSPMODE_A			7
++#define MSPMODE_B			8
++/*----------------------------------------------------------*/
++
++#define xf86_InitMSP3430	InitMSP3430
++extern _X_EXPORT void InitMSP3430(MSP3430Ptr m);
++
++#define xf86_DetectMSP3430	DetectMSP3430
++extern _X_EXPORT MSP3430Ptr DetectMSP3430(I2CBusPtr b, I2CSlaveAddr addr);
++
++#define xf86_ResetMSP3430	ResetMSP3430
++extern _X_EXPORT void ResetMSP3430(MSP3430Ptr m);
++
++#define xf86_MSP3430SetVolume	MSP3430SetVolume
++extern _X_EXPORT void MSP3430SetVolume(MSP3430Ptr m, CARD8 value);
++
++#define xf86_MSP3430SetSAP	MSP3430SetSAP
++extern _X_EXPORT void MSP3430SetSAP(MSP3430Ptr m, int mode);
++
++#define MSP3430SymbolsList \
++		"InitMSP3430", \
++		"DetectMSP3430", \
++		"ResetMSP3430", \
++		"MSP3430SetVolume", \
++		"MSP3430SetSAP"
++
++#endif
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/msp3430_module.c
+@@ -0,0 +1,24 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86Module.h"
++
++static XF86ModuleVersionInfo msp3430VersRec = {
++    "msp3430",
++    MODULEVENDORSTRING,
++    MODINFOSTRING1,
++    MODINFOSTRING2,
++    XORG_VERSION_CURRENT,
++    1, 0, 0,
++    ABI_CLASS_VIDEODRV,         /* This needs the video driver ABI */
++    ABI_VIDEODRV_VERSION,
++    MOD_CLASS_NONE,
++    {0, 0, 0, 0}
++};
++
++_X_EXPORT XF86ModuleData msp3430ModuleData = {
++    &msp3430VersRec,
++    NULL,
++    NULL
++};
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/tda8425.c
+@@ -0,0 +1,83 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86.h"
++#include "xf86i2c.h"
++#include "tda8425.h"
++#include "i2c_def.h"
++
++#define TDA8425(a,b)	{ \
++		data[0]=a; \
++		data[1]=b; \
++		I2C_WriteRead(&(t->d), data, 2, NULL, 0); \
++		}
++
++TDA8425Ptr
++Detect_tda8425(I2CBusPtr b, I2CSlaveAddr addr, Bool force)
++{
++    TDA8425Ptr t;
++
++    t = calloc(1, sizeof(TDA8425Rec));
++    if (t == NULL)
++        return NULL;
++    t->d.DevName = "TDA8425 BTSC Stereo Audio Processor";
++    t->d.SlaveAddr = addr;
++    t->d.pI2CBus = b;
++    t->d.NextDev = NULL;
++    t->d.StartTimeout = b->StartTimeout;
++    t->d.BitTimeout = b->BitTimeout;
++    t->d.AcknTimeout = b->AcknTimeout;
++    t->d.ByteTimeout = b->ByteTimeout;
++
++    if (!force && !I2CProbeAddress(b, addr)) {
++        free(t);
++        return NULL;
++    }
++
++    /* set default parameters */
++    if (!I2CDevInit(&(t->d))) {
++        free(t);
++        return NULL;
++    }
++
++    return t;
++}
++
++Bool
++tda8425_init(TDA8425Ptr t)
++{
++    t->stereo = 3;              /* 3 = Spacial 2 = Linear 1 = Pseudo 0 = Forced mono */
++    t->v_left = 0xFF;           /* FF - C0 */
++    t->v_right = 0xFF;          /* FF - C0 */
++    t->bass = 0xF6;             /* 0xFF - 0xF0 */
++    t->treble = 0xF6;           /* 0xFF - 0xF0 */
++    t->src_sel = 3;             /* 3 - stereo */
++    t->mute = TRUE;
++    t->mux = 0;                 /* 0 - source one, 1 -source 2 */
++
++    tda8425_setaudio(t);
++    return TRUE;
++}
++
++void
++tda8425_setaudio(TDA8425Ptr t)
++{
++    I2CByte data[2];
++
++    TDA8425(0x00, t->v_left);
++    TDA8425(0x01, t->v_right);
++    TDA8425(0x02, t->bass);
++    TDA8425(0x03, t->treble);
++    TDA8425(0x08,
++            0xC0 | (t->mute ? 0x20 : 0x0) | (t->stereo << 3) | (t->
++                                                                src_sel << 1) |
++            t->mux);
++}
++
++void
++tda8425_mute(TDA8425Ptr t, Bool mute)
++{
++    t->mute = mute;
++    tda8425_setaudio(t);
++}
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/tda8425.h
+@@ -0,0 +1,44 @@
++#ifndef __TDA8425_H__
++#define __TDA8425_H__
++
++#include "xf86i2c.h"
++
++typedef struct {
++    I2CDevRec d;
++
++    int mux;
++    int stereo;
++    int v_left;
++    int v_right;
++    int bass;
++    int treble;
++    int src_sel;
++    Bool mute;
++} TDA8425Rec, *TDA8425Ptr;
++
++#define TDA8425_ADDR_1   0x82
++
++/* the third parameter is meant to force detection of tda8425.
++   This is because tda8425 is write-only and complete implementation
++   of I2C protocol is not always available. Besides address there is no good
++   way to autodetect it so we have to _know_ it is there anyway */
++
++#define xf86_Detect_tda8425	Detect_tda8425
++extern _X_EXPORT TDA8425Ptr Detect_tda8425(I2CBusPtr b, I2CSlaveAddr addr,
++                                           Bool force);
++#define xf86_tda8425_init	tda8425_init
++extern _X_EXPORT Bool tda8425_init(TDA8425Ptr t);
++
++#define xf86_tda8425_setaudio	tda8425_setaudio
++extern _X_EXPORT void tda8425_setaudio(TDA8425Ptr t);
++
++#define xf86_tda8425_mute	tda8425_mute
++extern _X_EXPORT void tda8425_mute(TDA8425Ptr t, Bool mute);
++
++#define TDA8425SymbolsList  \
++		"Detect_tda8425", \
++		"tda8425_init", \
++		"tda8425_setaudio", \
++		"tda8425_mute"
++
++#endif
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/tda8425_module.c
+@@ -0,0 +1,24 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86Module.h"
++
++static XF86ModuleVersionInfo tda8425VersRec = {
++    "tda8425",
++    MODULEVENDORSTRING,
++    MODINFOSTRING1,
++    MODINFOSTRING2,
++    XORG_VERSION_CURRENT,
++    1, 0, 0,
++    ABI_CLASS_VIDEODRV,         /* This needs the video driver ABI */
++    ABI_VIDEODRV_VERSION,
++    MOD_CLASS_NONE,
++    {0, 0, 0, 0}
++};
++
++_X_EXPORT XF86ModuleData tda8425ModuleData = {
++    &tda8425VersRec,
++    NULL,
++    NULL
++};
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/tda9850.c
+@@ -0,0 +1,136 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86.h"
++#include "xf86i2c.h"
++#include "tda9850.h"
++#include "i2c_def.h"
++
++#define TDA9850(a,b)	{ \
++		data[0]=a; \
++		data[1]=b; \
++		I2C_WriteRead(&(t->d), data, 2, NULL, 0); \
++		}
++
++TDA9850Ptr
++Detect_tda9850(I2CBusPtr b, I2CSlaveAddr addr)
++{
++    TDA9850Ptr t;
++    I2CByte a;
++
++    t = calloc(1, sizeof(TDA9850Rec));
++    if (t == NULL)
++        return NULL;
++    switch (addr) {
++    case TDA9850_ADDR_1:
++        t->d.DevName = "TDA9850 BTSC Stereo+SAP Audio Processor";
++        break;
++    default:
++        t->d.DevName = "Generic TDAxxxx";
++        break;
++    }
++    t->d.SlaveAddr = addr;
++    t->d.pI2CBus = b;
++    t->d.NextDev = NULL;
++    t->d.StartTimeout = b->StartTimeout;
++    t->d.BitTimeout = b->BitTimeout;
++    t->d.AcknTimeout = b->AcknTimeout;
++    t->d.ByteTimeout = b->ByteTimeout;
++
++    if (!I2C_WriteRead(&(t->d), NULL, 0, &a, 1)) {
++        free(t);
++        return NULL;
++    }
++
++    /* set default parameters */
++    if (!I2CDevInit(&(t->d))) {
++        free(t);
++        return NULL;
++    }
++
++    return t;
++}
++
++Bool
++tda9850_init(TDA9850Ptr t)
++{
++    t->stereo = 1;
++    t->sap = 0;
++    t->mute = TRUE;
++    t->sap_mute = TRUE;
++    tda9850_setaudio(t);
++    return TRUE;
++}
++
++void
++tda9850_setaudio(TDA9850Ptr t)
++{
++    CARD8 data[2];
++
++    if (t->mux == 2) {
++        TDA9850(0x04, 0x0F);
++        TDA9850(0x05, 0x0F);
++        TDA9850(0x06, 0x58);
++        TDA9850(0x07, 0x07);
++        TDA9850(0x08, 0x00);
++        TDA9850(0x09, 0x00);
++        TDA9850(0x0A, 0x03);
++    }
++    else {
++        TDA9850(0x04, 0x07);
++        TDA9850(0x05, 0x07);
++        TDA9850(0x06, 0x58);
++        TDA9850(0x07, 0x07);
++        TDA9850(0x08, 0x10);
++        TDA9850(0x09, 0x10);
++        TDA9850(0x0A, 0x03);
++    }
++
++    TDA9850(0x06,
++            (t->stereo << 6) | (t->sap << 7) | (t->mute ? 0x8 : 0) | (t->
++                                                                      sap_mute ?
++                                                                      0x10 :
++                                                                      0x0));
++}
++
++void
++tda9850_mute(TDA9850Ptr t, Bool mute)
++{
++    CARD8 data[2];
++
++    xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO, "tda9850_mute %s\n",
++               mute ? "on" : "off");
++    t->mute = mute;
++
++    TDA9850(0x06,
++            (t->stereo << 6) | (t->sap << 7) | (t->mute ? 0x8 : 0x0) | (t->
++                                                                        sap_mute
++                                                                        ? 0x10 :
++                                                                        0x0));
++}
++
++void
++tda9850_sap_mute(TDA9850Ptr t, Bool sap_mute)
++{
++    CARD8 data[2];
++
++    xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO, "tda9850_sap_mute %s\n",
++               sap_mute ? "on" : "off");
++    t->sap_mute = sap_mute;
++
++    TDA9850(0x06,
++            (t->stereo << 6) | (t->sap << 7) | (t->mute ? 0x8 : 0x0) | (t->
++                                                                        sap_mute
++                                                                        ? 0x10 :
++                                                                        0x0));
++}
++
++CARD16
++tda9850_getstatus(TDA9850Ptr t)
++{
++    CARD16 status;
++
++    I2C_WriteRead(&(t->d), NULL, 0, (I2CByte *) &status, 2);
++    return status;
++}
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/tda9850.h
+@@ -0,0 +1,43 @@
++#ifndef __TDA9850_H__
++#define __TDA9850_H__
++
++#include "xf86i2c.h"
++
++typedef struct {
++    I2CDevRec d;
++
++    int mux;
++    int stereo;
++    int sap;
++    Bool mute;
++    Bool sap_mute;
++} TDA9850Rec, *TDA9850Ptr;
++
++#define TDA9850_ADDR_1   0xB4
++
++#define xf86_Detect_tda9850	Detect_tda9850
++extern _X_EXPORT TDA9850Ptr Detect_tda9850(I2CBusPtr b, I2CSlaveAddr addr);
++
++#define xf86_tda9850_init	tda9850_init
++extern _X_EXPORT Bool tda9850_init(TDA9850Ptr t);
++
++#define xf86_tda9850_setaudio	tda9850_setaudio
++extern _X_EXPORT void tda9850_setaudio(TDA9850Ptr t);
++
++#define xf86_tda9850_mute	tda9850_mute
++extern _X_EXPORT void tda9850_mute(TDA9850Ptr t, Bool mute);
++
++#define xf86_tda9850_sap_mute	tda9850_sap_mute
++extern _X_EXPORT void tda9850_sap_mute(TDA9850Ptr t, Bool sap_mute);
++
++#define xf86_tda9850_getstatus	tda9850_getstatus
++extern _X_EXPORT CARD16 tda9850_getstatus(TDA9850Ptr t);
++
++#define TDA9850SymbolsList  \
++		"Detect_tda9850", \
++		"tda9850_init", \
++		"tda9850_setaudio", \
++		"tda9850_mute", \
++		"tda9850_sap_mute"
++
++#endif
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/tda9850_module.c
+@@ -0,0 +1,24 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86Module.h"
++
++static XF86ModuleVersionInfo tda9850VersRec = {
++    "tda9850",
++    MODULEVENDORSTRING,
++    MODINFOSTRING1,
++    MODINFOSTRING2,
++    XORG_VERSION_CURRENT,
++    1, 0, 0,
++    ABI_CLASS_VIDEODRV,         /* This needs the video driver ABI */
++    ABI_VIDEODRV_VERSION,
++    MOD_CLASS_NONE,
++    {0, 0, 0, 0}
++};
++
++_X_EXPORT XF86ModuleData tda9850ModuleData = {
++    &tda9850VersRec,
++    NULL,
++    NULL
++};
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/tda9885.c
+@@ -0,0 +1,100 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86.h"
++#include "xf86i2c.h"
++#include "tda9885.h"
++#include "i2c_def.h"
++
++TDA9885Ptr
++Detect_tda9885(I2CBusPtr b, I2CSlaveAddr addr)
++{
++    TDA9885Ptr t;
++    I2CByte a;
++
++    t = calloc(1, sizeof(TDA9885Rec));
++    if (t == NULL)
++        return NULL;
++    switch (addr) {
++    case TDA9885_ADDR_1:
++    case TDA9885_ADDR_2:
++    case TDA9885_ADDR_3:
++    case TDA9885_ADDR_4:
++        t->d.DevName = "TDA9885 Alignment-free IF-PLL";
++        break;
++    default:
++        t->d.DevName = "Generic TDAxxxx";
++        break;
++    }
++    t->d.SlaveAddr = addr;
++    t->d.pI2CBus = b;
++    t->d.NextDev = NULL;
++    t->d.StartTimeout = b->StartTimeout;
++    t->d.BitTimeout = b->BitTimeout;
++    t->d.AcknTimeout = b->AcknTimeout;
++    t->d.ByteTimeout = b->ByteTimeout;
++
++    if (!I2C_WriteRead(&(t->d), NULL, 0, &a, 1)) {
++        free(t);
++        return NULL;
++    }
++
++    /* set default parameters */
++    if (!I2CDevInit(&(t->d))) {
++        free(t);
++        return NULL;
++    }
++
++    return t;
++}
++
++Bool
++tda9885_init(TDA9885Ptr t)
++{
++    t->forced_mute_audio = 1;
++    return TRUE;
++}
++
++void
++tda9885_getstatus(TDA9885Ptr t)
++{
++    CARD8 value;
++
++    I2C_WriteRead(&(t->d), NULL, 0, &value, 1);
++    t->after_reset = value & 1;
++    t->afc_status = (value >> 1) & 0xf;
++    t->fm_carrier = (value >> 5) & 1;
++    t->vif_level = (value >> 6) & 1;
++    t->afc_win = (value >> 7) & 1;
++}
++
++void
++tda9885_setparameters(TDA9885Ptr t)
++{
++    CARD8 data[4];
++
++    data[0] = 0;                /* start with subaddress 0 */
++    data[1] = (t->sound_trap & 1) | ((t->auto_mute_fm & 1) << 1) | ((t->carrier_mode & 1) << 2) | ((t->modulation & 3) << 3) | ((t->forced_mute_audio & 1) << 5) | ((t->port1 & 1) << 6) | ((t->port2 & 1) << 7);       /* B data */
++    data[2] = (t->top_adjustment & 0x1f) | ((t->deemphasis & 0x3) << 5) | ((t->audio_gain & 1) << 7);   /* C data */
++    data[3] = (t->standard_sound_carrier & 0x3) | ((t->standard_video_if & 0x07) << 2) | ((t->minimum_gain & 0x01) << 5) | ((t->gating & 0x01) << 6) | ((t->vif_agc & 0x01) << 7);      /* E data */
++
++    I2C_WriteRead(&(t->d), data, 4, NULL, 0);
++
++    xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO,
++               "TDA9885 setparam: B data: %x, C data: %x, E data: %x\n",
++               data[1], data[2], data[3]);
++}
++
++void
++tda9885_dumpstatus(TDA9885Ptr t)
++{
++    xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO,
++               "TDA9885 status: after_reset=%d afc_status=%d (%3.1f kHz off) fm_carrier=%d vif_level=%d afc_win=%d %s\n",
++               t->after_reset, t->afc_status,
++               (t->afc_status <
++                8) ? -12.5 - t->afc_status * 25.0 : -12.5 + (16 -
++                                                             t->afc_status) *
++               25.0, t->fm_carrier, t->vif_level, t->afc_win,
++               t->afc_win ? "VCO in" : "VCO out");
++}
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/tda9885.h
+@@ -0,0 +1,63 @@
++#ifndef __TDA9885_H__
++#define __TDA9885_H__
++
++#include "xf86i2c.h"
++
++typedef struct {
++    I2CDevRec d;
++
++    /* write-only parameters */
++    /* B DATA */
++    CARD8 sound_trap;
++    CARD8 auto_mute_fm;
++    CARD8 carrier_mode;
++    CARD8 modulation;
++    CARD8 forced_mute_audio;
++    CARD8 port1;
++    CARD8 port2;
++    /* C DATA */
++    CARD8 top_adjustment;
++    CARD8 deemphasis;
++    CARD8 audio_gain;
++    /* E DATA */
++    CARD8 standard_sound_carrier;
++    CARD8 standard_video_if;
++    CARD8 minimum_gain;
++    CARD8 gating;
++    CARD8 vif_agc;
++    /* read-only values */
++
++    CARD8 after_reset;
++    CARD8 afc_status;
++    CARD8 vif_level;
++    CARD8 afc_win;
++    CARD8 fm_carrier;
++} TDA9885Rec, *TDA9885Ptr;
++
++#define TDA9885_ADDR_1   0x86
++#define TDA9885_ADDR_2   0x84
++#define TDA9885_ADDR_3   0x96
++#define TDA9885_ADDR_4   0x94
++
++#define xf86_Detect_tda9885		Detect_tda9885
++extern _X_EXPORT TDA9885Ptr Detect_tda9885(I2CBusPtr b, I2CSlaveAddr addr);
++
++#define xf86_tda9885_init		tda9885_init
++extern _X_EXPORT Bool tda9885_init(TDA9885Ptr t);
++
++#define xf86_tda9885_setparameters	tda9885_setparameters
++extern _X_EXPORT void tda9885_setparameters(TDA9885Ptr t);
++
++#define xf86_tda9885_getstatus		tda9885_getstatus
++extern _X_EXPORT void tda9885_getstatus(TDA9885Ptr t);
++
++#define xf86_tda9885_dumpstatus		tda9885_dumpstatus
++extern _X_EXPORT void tda9885_dumpstatus(TDA9885Ptr t);
++
++#define TDA9885SymbolsList  \
++		"Detect_tda9885", \
++		"tda9885_init", \
++		"tda9885_setaudio", \
++		"tda9885_mute"
++
++#endif
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/tda9885_module.c
+@@ -0,0 +1,24 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86Module.h"
++
++static XF86ModuleVersionInfo tda9885VersRec = {
++    "tda9885",
++    MODULEVENDORSTRING,
++    MODINFOSTRING1,
++    MODINFOSTRING2,
++    XORG_VERSION_CURRENT,
++    1, 0, 0,
++    ABI_CLASS_VIDEODRV,         /* This needs the video driver ABI */
++    ABI_VIDEODRV_VERSION,
++    MOD_CLASS_NONE,
++    {0, 0, 0, 0}
++};
++
++_X_EXPORT XF86ModuleData tda9885ModuleData = {
++    &tda9885VersRec,
++    NULL,
++    NULL
++};
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/uda1380.c
+@@ -0,0 +1,196 @@
++/*************************************************************************************
++ * Copyright (C) 2005 Bogdan D. bogdand@users.sourceforge.net
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy of this 
++ * software and associated documentation files (the "Software"), to deal in the Software 
++ * without restriction, including without limitation the rights to use, copy, modify, 
++ * merge, publish, distribute, sublicense, and/or sell copies of the Software, 
++ * and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in all copies or 
++ * substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
++ * INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE 
++ * AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, 
++ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
++ *
++ * Except as contained in this notice, the name of the author shall not be used in advertising or 
++ * otherwise to promote the sale, use or other dealings in this Software without prior written 
++ * authorization from the author.
++ *
++ ************************************************************************************/
++
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86.h"
++#include "xf86i2c.h"
++#include "uda1380.h"
++#include "i2c_def.h"
++
++UDA1380Ptr
++Detect_uda1380(I2CBusPtr b, I2CSlaveAddr addr)
++{
++    UDA1380Ptr t;
++    I2CByte a;
++
++    t = calloc(1, sizeof(UDA1380Rec));
++    if (t == NULL)
++        return NULL;
++    switch (addr) {
++    case UDA1380_ADDR_1:
++    case UDA1380_ADDR_2:
++        t->d.DevName = "UDA1380 Stereo audion coder-decoder";
++        break;
++    default:
++        t->d.DevName = "Generic UDAxxxx";
++        break;
++    }
++    t->d.SlaveAddr = addr;
++    t->d.pI2CBus = b;
++    t->d.NextDev = NULL;
++    t->d.StartTimeout = b->StartTimeout;
++    t->d.BitTimeout = b->BitTimeout;
++    t->d.AcknTimeout = b->AcknTimeout;
++    t->d.ByteTimeout = b->ByteTimeout;
++
++    if (!I2C_WriteRead(&(t->d), NULL, 0, &a, 1)) {
++        free(t);
++        return NULL;
++    }
++
++    /* set default parameters */
++    if (!I2CDevInit(&(t->d))) {
++        free(t);
++        return NULL;
++    }
++
++    xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO,
++               "UDA1380 stereo coder-decoder detected\n");
++
++    return t;
++}
++
++Bool
++uda1380_init(UDA1380Ptr t)
++{
++    CARD8 data[3];
++    CARD16 tmp;
++    Bool ret;
++
++    /* Power control */
++    data[0] = 0x02;
++    tmp =
++        (1 << 13) | (1 << 10) | (1 << 8) | (1 << 7) | (1 << 6) | (1 << 3) | (1
++                                                                             <<
++                                                                             1);
++    data[1] = (CARD8) ((tmp >> 8) & 0xff);
++    data[2] = (CARD8) (tmp & 0xff);
++    ret = I2C_WriteRead(&(t->d), data, 3, NULL, 0);
++    if (ret == FALSE) {
++        xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO,
++                   "UDA1380 failed to initialize\n");
++        return FALSE;
++    }
++
++    /* Analog mixer  (AVC) */
++    data[0] = 0x03;
++    /* the analog mixer is muted initially */
++    data[1] = 0x3f;
++    data[2] = 0x3f;
++    ret = I2C_WriteRead(&(t->d), data, 3, NULL, 0);
++    if (ret == FALSE) {
++        xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO,
++                   "UDA1380 failed to initialize\n");
++        return FALSE;
++    }
++
++    xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO, "UDA1380 initialized\n");
++
++    return TRUE;
++}
++
++void
++uda1380_shutdown(UDA1380Ptr t)
++{
++    CARD8 data[3];
++    Bool ret;
++
++    /* Power control */
++    data[0] = 0x02;
++    data[1] = 0;
++    data[2] = 0;
++    ret = I2C_WriteRead(&(t->d), data, 3, NULL, 0);
++    if (ret == FALSE)
++        xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO,
++                   "UDA1380 failed to shutdown\n");
++}
++
++void
++uda1380_setvolume(UDA1380Ptr t, INT32 value)
++{
++    CARD8 data[3];
++
++    /*
++     * We have to scale the value ranging from -1000 to 1000 to 0x2c to 0
++     */
++    CARD8 volume = 47 - (CARD8) ((value + 1000) * 47 / 2000);
++    Bool ret;
++
++    t->analog_mixer_settings = ((volume << 8) & 0x3f00) | (volume & 0x3f);
++
++    /* Analog mixer  (AVC) */
++    data[0] = 0x03;
++    data[1] = volume & 0x3f;
++    data[2] = volume & 0x3f;
++    ret = I2C_WriteRead(&(t->d), data, 3, NULL, 0);
++    if (ret == FALSE)
++        xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO,
++                   "UDA1380 failed to set volume\n");
++}
++
++void
++uda1380_mute(UDA1380Ptr t, Bool mute)
++{
++    CARD8 data[3];
++    Bool ret;
++
++    if (mute == TRUE) {
++        /* Analog mixer  (AVC) */
++        data[0] = 0x03;
++        data[1] = 0xff;
++        data[2] = 0xff;
++        ret = I2C_WriteRead(&(t->d), data, 3, NULL, 0);
++        if (ret == FALSE)
++            xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO,
++                       "UDA1380 failed to mute\n");
++    }
++    else {
++        /* Analog mixer  (AVC) */
++        data[0] = 0x03;
++        data[1] = (CARD8) ((t->analog_mixer_settings >> 8) & 0x3f);
++        data[2] = (CARD8) (t->analog_mixer_settings & 0x3f);
++        ret = I2C_WriteRead(&(t->d), data, 3, NULL, 0);
++        if (ret == FALSE)
++            xf86DrvMsg(t->d.pI2CBus->scrnIndex, X_INFO,
++                       "UDA1380 failed to unmute\n");
++    }
++}
++
++void
++uda1380_getstatus(UDA1380Ptr t)
++{
++}
++
++void
++uda1380_setparameters(UDA1380Ptr t)
++{
++}
++
++void
++uda1380_dumpstatus(UDA1380Ptr t)
++{
++}
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/uda1380.h
+@@ -0,0 +1,81 @@
++/*************************************************************************************
++ * Copyright (C) 2005 Bogdan D. bogdand@users.sourceforge.net
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy of this 
++ * software and associated documentation files (the "Software"), to deal in the Software 
++ * without restriction, including without limitation the rights to use, copy, modify, 
++ * merge, publish, distribute, sublicense, and/or sell copies of the Software, 
++ * and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in all copies or 
++ * substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
++ * INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE 
++ * AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, 
++ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
++ *
++ * Except as contained in this notice, the name of the author shall not be used in advertising or 
++ * otherwise to promote the sale, use or other dealings in this Software without prior written 
++ * authorization from the author.
++ *
++ * Revision 1.3  2005/09/24 21:56:00  bogdand
++ * Changed the license to a X/MIT one
++ *
++ * Revision 1.2  2005/07/01 22:43:11  daniels
++ * Change all misc.h and os.h references to <X11/foo.h>.
++ *
++ *
++ ************************************************************************************/
++
++#ifndef __UDA1380_H__
++#define __UDA1380_H__
++
++#include "xf86i2c.h"
++
++typedef struct {
++    I2CDevRec d;
++
++    CARD16 analog_mixer_settings;       /* register 0x03 */
++
++} UDA1380Rec, *UDA1380Ptr;
++
++#define UDA1380_ADDR_1   0x30
++#define UDA1380_ADDR_2   0x34
++
++#define xf86_Detect_uda1380		Detect_uda1380
++extern _X_EXPORT UDA1380Ptr Detect_uda1380(I2CBusPtr b, I2CSlaveAddr addr);
++
++#define xf86_uda1380_init		uda1380_init
++extern _X_EXPORT Bool uda1380_init(UDA1380Ptr t);
++
++#define xf86_uda1380_shutdown		uda1380_shutdown
++extern _X_EXPORT void uda1380_shutdown(UDA1380Ptr t);
++
++#define xf86_uda1380_setvolume		uda1380_setvolume
++extern _X_EXPORT void uda1380_setvolume(UDA1380Ptr t, INT32);
++
++#define xf86_uda1380_mute		uda1380_mute
++extern _X_EXPORT void uda1380_mute(UDA1380Ptr t, Bool);
++
++#define xf86_uda1380_setparameters	uda1380_setparameters
++extern _X_EXPORT void uda1380_setparameters(UDA1380Ptr t);
++
++#define xf86_uda1380_getstatus		uda1380_getstatus
++extern _X_EXPORT void uda1380_getstatus(UDA1380Ptr t);
++
++#define xf86_uda1380_dumpstatus		uda1380_dumpstatus
++extern _X_EXPORT void uda1380_dumpstatus(UDA1380Ptr t);
++
++#define UDA1380SymbolsList  \
++		"Detect_uda1380", \
++		"uda1380_init", \
++		"uda1380_shutdown", \
++		"uda1380_setvolume", \
++		"uda1380_mute", \
++		"uda1380_setparameters", \
++		"uda1380_getstatus", \
++		"uda1380_dumpstatus"
++
++#endif
+reverted:
+--- /dev/null
++++ a/hw/xfree86/i2c/uda1380_module.c
+@@ -0,0 +1,24 @@
++#ifdef HAVE_XORG_CONFIG_H
++#include <xorg-config.h>
++#endif
++
++#include "xf86Module.h"
++
++static XF86ModuleVersionInfo uda1380VersRec = {
++    "uda1380",
++    MODULEVENDORSTRING,
++    MODINFOSTRING1,
++    MODINFOSTRING2,
++    XORG_VERSION_CURRENT,
++    1, 0, 0,
++    ABI_CLASS_VIDEODRV,         /* This needs the video driver ABI */
++    ABI_VIDEODRV_VERSION,
++    MOD_CLASS_NONE,
++    {0, 0, 0, 0}
++};
++
++_X_EXPORT XF86ModuleData uda1380ModuleData = {
++    &uda1380VersRec,
++    NULL,
++    NULL
++};
+reverted:
+--- b/hw/xfree86/loader/loadmod.c
++++ a/hw/xfree86/loader/loadmod.c
+@@ -197,6 +197,7 @@
+     "",
+     "input/",
+     "drivers/",
++    "multimedia/",
+     "extensions/",
+     "internal/",
+     NULL

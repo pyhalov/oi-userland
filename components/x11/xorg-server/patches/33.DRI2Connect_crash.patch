@@ -1,0 +1,11 @@
+--- xorg-server-1.17.2/hw/xfree86/dixmods/Makefile.am.1	2015-09-25 14:34:31.535577915 +0300
++++ xorg-server-1.17.2/hw/xfree86/dixmods/Makefile.am	2015-09-25 14:35:24.614893337 +0300
+@@ -32,7 +32,7 @@
+ 
+ libglx_la_LDFLAGS = -module -avoid-version $(LD_NO_UNDEFINED_FLAG)
+ libglx_la_LDFLAGS += -R$(extsmoduledir:amd64/extensions=extensions/amd64) $(XORG_EXTERNS_FLAG)
+-libglx_la_LIBADD = $(top_builddir)/glx/libglx.la $(GLX_SYS_LIBS)
++libglx_la_LIBADD = $(top_builddir)/glx/libglx.la $(top_builddir)/hw/xfree86/dri2/libdri2.la $(GLX_SYS_LIBS)
+ if AIGLX_DRI_LOADER
+ libglx_la_LIBADD += $(top_builddir)/glx/libglxdri.la
+ libglx_la_LDFLAGS += -R$(extsmoduledir)

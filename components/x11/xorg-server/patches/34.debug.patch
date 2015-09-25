@@ -1,0 +1,15 @@
+--- xorg-server-1.17.2/hw/xfree86/common/xf86Bus.c.1	2015-09-26 01:29:06.625046051 +0300
++++ xorg-server-1.17.2/hw/xfree86/common/xf86Bus.c	2015-09-26 01:31:22.731471453 +0300
+@@ -169,10 +169,10 @@
+         }
+         if (layout->screen == NULL) {
+             /* No match found */
+-            xf86Msg(X_ERROR,
++      /*      xf86Msg(X_ERROR,
+                     "Screen %d deleted because of no matching config section.\n",
+                     i);
+-            xf86DeleteScreen(xf86Screens[i--]);
++            xf86DeleteScreen(xf86Screens[i--]); */
+         }
+     }
+ 

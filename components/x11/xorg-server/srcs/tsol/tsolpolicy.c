@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2004, 2015, Oracle and/or its affiliates. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -298,7 +298,7 @@ HasWinSelection(TsolInfoPtr tsolinfo)
 }
 
 void
-TsolCheckDrawableAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldata)
+TsolCheckDrawableAccess(CallbackListPtr *pcbl, void *nulldata, void *calldata)
 {
 	XaceResourceAccessRec *rec = calldata;
 	ClientPtr client = rec->client;
@@ -315,7 +315,7 @@ TsolCheckDrawableAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldat
 
 	Mask check_mode = access_mode;
 	TsolInfoPtr tsolinfo = GetClientTsolInfo(client);
-	TsolResPtr  tsolres;
+	TsolResPtr  tsolres = NULL;
 	xpolicy_t flags;
 	int reqtype;
 
@@ -340,6 +340,13 @@ TsolCheckDrawableAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldat
 		tsolres = TsolPixmapPrivate(pMap);
 		err_code = BadDrawable;
 		break;
+	}
+
+	/* Ignore unlabeled resources */
+	if (tsolres->sl == NULL) {
+		tsolres->sl= tsolinfo->sl;
+		tsolres->uid = tsolinfo->uid;
+		tsolres->pid = tsolinfo->pid;
 	}
 
 	switch (reqtype) {
@@ -372,6 +379,7 @@ TsolCheckDrawableAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldat
 	case X_UngrabKey:
 	case X_GrabButton:
 	case X_UngrabButton:
+	case X_WarpPointer:
 		/*
 		 * Allow pointer grab on root window, as long as
 		 * pointer is currently in a window owned by
@@ -489,7 +497,7 @@ TsolCheckDrawableAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldat
 }
 
 void
-TsolCheckXIDAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldata)
+TsolCheckXIDAccess(CallbackListPtr *pcbl, void *nulldata, void *calldata)
 {
 	XaceResourceAccessRec *rec = calldata;
 	ClientPtr client = rec->client;
@@ -529,6 +537,7 @@ TsolCheckXIDAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldata)
 		break;
 	default:
 		err_code = BadValue;
+		object_code = AW_END;
 		break;
 	}
 
@@ -588,7 +597,7 @@ TsolCheckXIDAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldata)
 }
 
 void
-TsolCheckServerAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldata)
+TsolCheckServerAccess(CallbackListPtr *pcbl, void *nulldata, void *calldata)
 {
 	XaceServerAccessRec *rec = calldata;
 	ClientPtr client = rec->client;
@@ -675,7 +684,7 @@ TsolCheckServerAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldata)
 }
 
 void
-TsolCheckClientAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldata)
+TsolCheckClientAccess(CallbackListPtr *pcbl, void *nulldata, void *calldata)
 {
 	XaceClientAccessRec *rec = calldata;
 	ClientPtr client = rec->client;
@@ -736,7 +745,7 @@ TsolCheckClientAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldata)
 }
 
 void
-TsolCheckDeviceAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldata)
+TsolCheckDeviceAccess(CallbackListPtr *pcbl, void *nulldata, void *calldata)
 {
 	XaceDeviceAccessRec *rec = (XaceDeviceAccessRec *) calldata;
 	ClientPtr client = rec->client;
@@ -771,7 +780,8 @@ TsolCheckDeviceAccess(CallbackListPtr *pcbl, pointer nulldata, pointer calldata)
 
 	/* change/set access requires privilege */
 	modes = (DixFreezeAccess | DixGrabAccess | DixManageAccess |
-		 DixSetAttrAccess | DixSetFocusAccess | DixForceAccess);
+		 DixSetAttrAccess | DixSetFocusAccess | DixForceAccess |
+		 DixWriteAccess);
 	if (check_mode & modes) {
 		if (priv_win_devices ||
 		    client_has_privilege(tsolinfo, pset_win_devices))
