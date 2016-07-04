@@ -18,40 +18,38 @@
 #
 # CDDL HEADER END
 #
-# Copyright (c) 2013, Aurelien Larcher. All rights reserved.
+# Copyright (c) 2015, Aurelien Larcher. All rights reserved.
 #
-include ../../../make-rules/shared-macros.mk
+include ../../../../make-rules/shared-macros.mk
 
-COMPONENT_NAME=		evas_generic_loaders
-COMPONENT_VERSION=	1.12.0
+COMPONENT_NAME=		expedite
+COMPONENT_VERSION=	1.7.9
 COMPONENT_REVISION=	1
-COMPONENT_FMRI=     	library/e/$(COMPONENT_NAME)
+COMPONENT_FMRI=     	library/e/expedite
 COMPONENT_CLASSIFICATION=System/Libraries
 COMPONENT_SRC=		$(COMPONENT_NAME)-$(COMPONENT_VERSION)
 COMPONENT_PROJECT_URL=	http://enlightenment.org
 COMPONENT_ARCHIVE=	$(COMPONENT_SRC).tar.gz
-COMPONENT_ARCHIVE_HASH=	sha256:c531c82845b656cb8ea8e2db1e413509d9b4558450be6c5ee27da0cdc781376e
-COMPONENT_ARCHIVE_URL=	http://download.enlightenment.org/rel/libs/$(COMPONENT_SRC_NAME)/$(COMPONENT_ARCHIVE)
-COMPONENT_LICENSE=      GPLv2
+COMPONENT_ARCHIVE_HASH=	sha256:a05be096c911e0d66d4bdc497ebb935a04ad23696de9084aed9959b5172a593e
+COMPONENT_ARCHIVE_URL=	http://download.enlightenment.org/releases/$(COMPONENT_ARCHIVE)
+COMPONENT_LICENSE=      BSD
 COMPONENT_LICENSE_FILE= $(COMPONENT_NAME).license
-COMPONENT_SUMMARY=      Enlightenment - Evas external binary executable loaders
+COMPONENT_SUMMARY=      Enlightenment - Performance and correctness test suite for Evas
 
 include $(WS_MAKE_RULES)/prep.mk
 include $(WS_MAKE_RULES)/configure.mk
 include $(WS_MAKE_RULES)/ips.mk
 
-COMPONENT_PREP_ACTION =        ( cd $(@D)  && \
-					libtoolize --copy --force &&\
-					aclocal -I m4 &&\
-					automake -c -f -a &&\
-					autoconf )
+PYTHON_VERSION=2.7
 
+PATCH_LEVEL=0
 
-CONFIGURE_OPTIONS+=	--enable-poppler
-CONFIGURE_OPTIONS+=	--enable-spectre
-CONFIGURE_OPTIONS+=	--disable-libraw # adding libraw requires a bump of libjpeg
-CONFIGURE_OPTIONS+=	--enable-svg
-CONFIGURE_OPTIONS+=	--enable-gstreamer
+CONFIGURE_OPTIONS+=	--enable-opengl-x11
+CONFIGURE_OPTIONS+=	--enable-software-x11
+CONFIGURE_OPTIONS+=	--with-x
+
+# pkgdepend fails to resolve the python version if env is used
+COMPONENT_POST_INSTALL_ACTION=sed -i -e '1 s|^.*$$|\#!/usr/bin/python$(PYTHON_VERSION)|' $(PROTO_DIR)/usr/bin/expedite-cmp; 
 
 
 build: $(BUILD_32)
@@ -60,7 +58,9 @@ install: $(INSTALL_32)
 
 test: $(NO_TESTS)
 
-BUILD_PKG_DEPENDENCIES =    $(BUILD_TOOLS)
-
-include $(WS_MAKE_RULES)/depend.mk
-
+REQUIRED_PACKAGES += library/e/efl
+REQUIRED_PACKAGES += library/sdl
+REQUIRED_PACKAGES += runtime/python-27
+REQUIRED_PACKAGES += system/library
+REQUIRED_PACKAGES += system/library/math
+REQUIRED_PACKAGES += x11/library/libx11

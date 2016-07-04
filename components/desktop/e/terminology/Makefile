@@ -20,33 +20,28 @@
 #
 # Copyright (c) 2015, Aurelien Larcher. All rights reserved.
 #
-include ../../../make-rules/shared-macros.mk
+include ../../../../make-rules/shared-macros.mk
 
-COMPONENT_NAME=		expedite
-COMPONENT_VERSION=	1.7.9
-COMPONENT_FMRI=     	library/e/expedite
-COMPONENT_CLASSIFICATION=System/Libraries
+COMPONENT_NAME=		terminology
+COMPONENT_VERSION=	0.8.0
+COMPONENT_FMRI=     	terminal/$(COMPONENT_NAME)
+COMPONENT_CLASSIFICATION=Applications/System Utilities
 COMPONENT_SRC=		$(COMPONENT_NAME)-$(COMPONENT_VERSION)
 COMPONENT_PROJECT_URL=	http://enlightenment.org
 COMPONENT_ARCHIVE=	$(COMPONENT_SRC).tar.gz
-COMPONENT_ARCHIVE_HASH=	sha256:a05be096c911e0d66d4bdc497ebb935a04ad23696de9084aed9959b5172a593e
-COMPONENT_ARCHIVE_URL=	http://download.enlightenment.org/releases/$(COMPONENT_ARCHIVE)
+COMPONENT_ARCHIVE_HASH=	sha256:7a10d44b023cf6134c2483304e4ad33bea6df0f11266aec482f54fa67a3ce628
+COMPONENT_ARCHIVE_URL=	http://download.enlightenment.org/rel/apps/$(COMPONENT_SRC_NAME)/$(COMPONENT_ARCHIVE)
 COMPONENT_LICENSE=      BSD
 COMPONENT_LICENSE_FILE= $(COMPONENT_NAME).license
-COMPONENT_SUMMARY=      Enlightenment - Performance and correctness test suite for Evas
+COMPONENT_SUMMARY=      Enlightenment - The best terminal emulator written with the EFL
 
 include $(WS_MAKE_RULES)/prep.mk
 include $(WS_MAKE_RULES)/configure.mk
 include $(WS_MAKE_RULES)/ips.mk
 
-PATCH_LEVEL=0
 
-CONFIGURE_OPTIONS+=	--enable-opengl-x11
-CONFIGURE_OPTIONS+=	--enable-software-x11
-CONFIGURE_OPTIONS+=	--with-x
-
-# pkgdepend fails to resolve the python version if env is used
-COMPONENT_POST_INSTALL_ACTION=sed -i -e '1 s|^.*$$|\#!/usr/bin/python$(PYTHON_VERSION)|' $(PROTO_DIR)/usr/bin/expedite-cmp; 
+# Need to regenerate configure and Makefiles as 1.13 is used.
+COMPONENT_PRE_CONFIGURE_ACTION= pushd $(SOURCE_DIR); aclocal -I m4 --install && autoconf && automake -a; popd;
 
 
 build: $(BUILD_32)
@@ -55,7 +50,7 @@ install: $(INSTALL_32)
 
 test: $(NO_TESTS)
 
-BUILD_PKG_DEPENDENCIES =    $(BUILD_TOOLS)
-
-include $(WS_MAKE_RULES)/depend.mk
-
+REQUIRED_PACKAGES += library/e/efl
+REQUIRED_PACKAGES += library/e/elementary
+REQUIRED_PACKAGES += system/library
+REQUIRED_PACKAGES += system/library/math
