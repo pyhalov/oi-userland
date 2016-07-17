@@ -1,0 +1,36 @@
+diff -ur kvmadm-0.10.3/bin/kvmadm kvmadm-0.10.3-perl/bin/kvmadm
+--- kvmadm-0.10.3/bin/kvmadm	2016-02-16 18:16:36.000000000 +0300
++++ kvmadm-0.10.3-perl/bin/kvmadm	2016-03-23 00:20:38.356025548 +0300
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/perl5/5.22/bin/perl
+ 
+ use lib qw(); # PERL5LIB
+ use FindBin;
+diff -ur kvmadm-0.10.3/bin/system-kvm kvmadm-0.10.3-perl/bin/system-kvm
+--- kvmadm-0.10.3/bin/system-kvm	2016-02-16 14:41:34.000000000 +0300
++++ kvmadm-0.10.3-perl/bin/system-kvm	2016-03-23 00:20:38.351509967 +0300
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/perl5/5.22/bin/perl
+ 
+ use lib qw(); # PERL5LIB
+ use FindBin;
+diff -ur kvmadm-0.10.3/probes/dns_probe kvmadm-0.10.3-perl/probes/dns_probe
+--- kvmadm-0.10.3/probes/dns_probe	2016-02-05 19:23:16.000000000 +0300
++++ kvmadm-0.10.3-perl/probes/dns_probe	2016-03-23 00:20:38.356356443 +0300
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/perl5/5.22/bin/perl
+ 
+ use strict;
+ use warnings;
+diff -ur kvmadm-0.10.3/probes/ping_probe kvmadm-0.10.3-perl/probes/ping_probe
+--- kvmadm-0.10.3/probes/ping_probe	2016-02-05 19:23:16.000000000 +0300
++++ kvmadm-0.10.3-perl/probes/ping_probe	2016-03-23 00:20:38.356666339 +0300
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env perl
++#!/usr/perl5/5.22/bin/perl
+ 
+ use strict;
+ use warnings;
