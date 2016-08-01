@@ -1,0 +1,85 @@
+--- mate-panel-1.14.0/applets/clock/clock.c.1	2016-08-01 22:49:22.109283187 +0300
++++ mate-panel-1.14.0/applets/clock/clock.c	2016-08-01 23:02:11.360657563 +0300
+@@ -41,6 +41,7 @@
+ #include <sys/time.h>
+ #include <math.h>
+ #include <locale.h>
++#include <stdlib.h>
+ 
+ #include <mate-panel-applet.h>
+ #include <mate-panel-applet-gsettings.h>
+@@ -1935,6 +1936,19 @@
+ static void
+ run_time_settings (GtkWidget *unused, ClockData *cd)
+ {
++#ifdef __sun__
++	/* Launch time-admin to set the timezone/and system time */
++	/* This is a illumos/Solaris specific workaround as we don't have PolicyKit */
++	/* To determine if user has permissions */
++	gchar *time_admin = g_find_program_in_path ("time-admin");
++	
++	if (time_admin) {
++		system (time_admin);
++		g_free (time_admin);
++	}
++
++	refresh_clock_timeout (cd);
++#else
+ 	ensure_time_settings_window_is_created (cd);
+ 	fill_time_settings_window (cd);
+ 
+@@ -1943,6 +1957,7 @@
+ 	gtk_window_present (GTK_WINDOW (cd->set_time_window));
+ 
+         refresh_click_timeout_time_only (cd);
++#endif
+ }
+ 
+ static void
+--- mate-panel-1.14.0/applets/clock/set-timezone.c.1	2016-08-01 22:51:36.507071223 +0300
++++ mate-panel-1.14.0/applets/clock/set-timezone.c	2016-08-01 22:59:39.428713395 +0300
+@@ -111,6 +111,18 @@
+ gint
+ can_set_system_timezone (void)
+ {
++#ifdef __sun__
++	/* Workaround for Solaris/illumos as PolicyKit does not exist */
++	gchar *time_admin = g_find_program_in_path ("time-admin");
++	gint ret_val = 0;
++
++	if (time_admin)
++		ret_val = 1;
++
++	g_free (time_admin);
++	
++	return ret_val;
++#else
+ 	time_t          now;
+ 
+ 	time (&now);
+@@ -120,6 +132,7 @@
+ 	}
+ 
+ 	return settimezone_cache;
++#endif
+ }
+ 
+ static gint   settime_cache = 0;
+@@ -135,6 +148,9 @@
+ gint
+ can_set_system_time (void)
+ {
++#ifdef __sun__
++	return (can_set_system_timezone ());
++#else
+ 	time_t now;
+ 
+ 	time (&now);
+@@ -144,6 +160,7 @@
+ 	}
+ 
+ 	return settime_cache;
++#endif
+ }
+ 
+ typedef struct {
