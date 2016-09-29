@@ -1,0 +1,14 @@
+Disable stackwalking to workaround crash on startup 
+in NS_LogInit()
+
+--- mozilla/configure.1	2016-09-24 11:43:21.769108520 +0300
++++ mozilla/configure	2016-09-24 11:45:17.307040169 +0300
+@@ -25533,7 +25533,7 @@
+ # builds with --enable-profiling in the .mozconfig (which is turned on in
+ # Nightly by default.)
+ case "$OS_TARGET" in
+-WINNT)
++WINNT|SunOS)
+     if test -z "$MOZ_OPTIMIZE" -o -n "$MOZ_PROFILING" -o -n "$MOZ_DEBUG"; then
+         MOZ_STACKWALKING=1
+     else

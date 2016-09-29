@@ -1,0 +1,137 @@
+--- mozilla/media/libsoundtouch/src/moz.build.1	2016-09-23 12:02:49.755464853 +0300
++++ mozilla/media/libsoundtouch/src/moz.build	2016-09-23 12:03:03.375798786 +0300
+@@ -52,3 +52,5 @@
+ 
+ # Use abort() instead of exception in SoundTouch.
+ DEFINES['ST_NO_EXCEPTION_HANDLING'] = 1
++
++NO_VISIBILITY_FLAGS = True
+--- mozilla/js/src/jsapi.cpp.~2~	2016-09-23 12:01:15.096523485 +0300
++++ mozilla/js/src/jsapi.cpp	2016-09-23 12:05:30.363408990 +0300
+@@ -113,7 +113,7 @@
+ #define JS_ADDRESSOF_VA_LIST(ap) (&(ap))
+ #endif
+ 
+-bool
++JS_PUBLIC_API(bool)
+ JS::CallArgs::requireAtLeast(JSContext* cx, const char* fnname, unsigned required) const
+ {
+     if (length() < required) {
+--- mozilla/js/public/CallArgs.h.~1~	2016-09-23 12:01:15.097952392 +0300
++++ mozilla/js/public/CallArgs.h	2016-09-23 12:07:13.419880597 +0300
+@@ -351,7 +351,7 @@
+      * Returns true if there are at least |required| arguments passed in. If
+      * false, it reports an error message on the context.
+      */
+-    bool requireAtLeast(JSContext* cx, const char* fnname, unsigned required) const;
++    JS_PUBLIC_API(bool) requireAtLeast(JSContext* cx, const char* fnname, unsigned required) const;
+ 
+ };
+ 
+--- mozilla/js/src/configure.1	2016-09-23 18:45:10.574743515 +0300
++++ mozilla/js/src/configure	2016-09-23 18:46:19.825868831 +0300
+@@ -10312,7 +10312,7 @@
+ 
+ 
+ 
+-if test "$GNU_CC" -a "$OS_TARGET" != WINNT; then
++if test "$GNU_CC" -a "$OS_TARGET" != WINNT -a "$OS_TARGET" != SunOS; then
+   cat >> confdefs.pytmp <<\EOF
+     (''' HAVE_VISIBILITY_HIDDEN_ATTRIBUTE ''', ' 1 ')
+ EOF
+#--- mozilla/configure.1	2016-09-24 08:19:16.150367147 +0300
+#+++ mozilla/configure	2016-09-24 08:20:02.568340325 +0300
+#@@ -11475,7 +11475,7 @@
+# cross_compiling=$ac_cv_prog_cc_cross
+# 
+# 
+#-if test "$GNU_CC" -a "$OS_TARGET" != WINNT; then
+#+if test "$GNU_CC" -a "$OS_TARGET" != WINNT -a "$OS_TARGET" != SunOS; then
+#   cat >> confdefs.pytmp <<\EOF
+#     (''' HAVE_VISIBILITY_HIDDEN_ATTRIBUTE ''', ' 1 ')
+# EOF
+--- mozilla/js/public/UbiNode.h	2016-08-25 20:37:55.000000000 +0300
++++ mozilla/js/public/UbiNode.h	2016-09-28 18:44:45.708584196 +0300
+@@ -1001,7 +1001,7 @@
+ /*** Concrete classes for ubi::Node referent types ************************************************/
+ 
+ template<>
+-struct Concrete<RootList> : public Base {
++struct JS_PUBLIC_API(Concrete<RootList>) : public Base {
+     UniquePtr<EdgeRange> edges(JSRuntime* rt, bool wantNames) const override;
+     const char16_t* typeName() const override { return concreteTypeName; }
+ 
+@@ -1017,7 +1017,7 @@
+ // A reusable ubi::Concrete specialization base class for types supported by
+ // JS::TraceChildren.
+ template<typename Referent>
+-class TracerConcrete : public Base {
++class JS_PUBLIC_API(TracerConcrete) : public Base {
+     const char16_t* typeName() const override { return concreteTypeName; }
+     UniquePtr<EdgeRange> edges(JSRuntime* rt, bool wantNames) const override;
+     JS::Zone* zone() const override;
+@@ -1033,7 +1033,7 @@
+ 
+ // For JS::TraceChildren-based types that have a 'compartment' method.
+ template<typename Referent>
+-class TracerConcreteWithCompartment : public TracerConcrete<Referent> {
++class JS_PUBLIC_API(TracerConcreteWithCompartment) : public TracerConcrete<Referent> {
+     typedef TracerConcrete<Referent> TracerBase;
+     JSCompartment* compartment() const override;
+ 
+@@ -1049,7 +1049,7 @@
+ // Define specializations for some commonly-used public JSAPI types.
+ // These can use the generic templates above.
+ template<>
+-struct Concrete<JS::Symbol> : TracerConcrete<JS::Symbol> {
++struct JS_PUBLIC_API(Concrete<JS::Symbol>) : TracerConcrete<JS::Symbol> {
+     Size size(mozilla::MallocSizeOf mallocSizeOf) const override;
+ 
+   protected:
+@@ -1061,7 +1061,7 @@
+     }
+ };
+ 
+-template<> struct Concrete<JSScript> : TracerConcreteWithCompartment<JSScript> {
++template<> struct JS_PUBLIC_API(Concrete<JSScript>) : TracerConcreteWithCompartment<JSScript> {
+     CoarseType coarseType() const final { return CoarseType::Script; }
+     Size size(mozilla::MallocSizeOf mallocSizeOf) const override;
+     const char* scriptFilename() const final;
+@@ -1075,7 +1075,7 @@
+ 
+ // The JSObject specialization.
+ template<>
+-class Concrete<JSObject> : public TracerConcreteWithCompartment<JSObject> {
++class JS_PUBLIC_API(Concrete<JSObject>) : public TracerConcreteWithCompartment<JSObject> {
+     const char* jsObjectClassName() const override;
+     bool jsObjectConstructorName(JSContext* cx,
+                                  UniquePtr<char16_t[], JS::FreePolicy>& outName) const override;
+@@ -1096,7 +1096,7 @@
+ };
+ 
+ // For JSString, we extend the generic template with a 'size' implementation.
+-template<> struct Concrete<JSString> : TracerConcrete<JSString> {
++template<> struct JS_PUBLIC_API(Concrete<JSString>) : TracerConcrete<JSString> {
+     Size size(mozilla::MallocSizeOf mallocSizeOf) const override;
+ 
+     CoarseType coarseType() const final { return CoarseType::String; }
+@@ -1110,7 +1110,7 @@
+ 
+ // The ubi::Node null pointer. Any attempt to operate on a null ubi::Node asserts.
+ template<>
+-class Concrete<void> : public Base {
++class JS_PUBLIC_API(Concrete<void>) : public Base {
+     const char16_t* typeName() const override;
+     Size size(mozilla::MallocSizeOf mallocSizeOf) const override;
+     UniquePtr<EdgeRange> edges(JSRuntime* rt, bool wantNames) const override;
+--- mozilla/js/src/jsobj.cpp.1	2016-09-28 18:41:57.381242410 +0300
++++ mozilla/js/src/jsobj.cpp	2016-09-28 18:48:50.104568704 +0300
+@@ -3729,7 +3729,7 @@
+     return obj.tenuredSizeOfThis() + info.sizeOfAllThings();
+ }
+ 
+-template<> const char16_t JS::ubi::TracerConcrete<JSObject>::concreteTypeName[] =
++template<> JS_PUBLIC_API(const char16_t) JS::ubi::TracerConcrete<JSObject>::concreteTypeName[] =
+     MOZ_UTF16("JSObject");
+ 
+ void

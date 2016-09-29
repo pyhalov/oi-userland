@@ -16,12 +16,12 @@
 include ../../../make-rules/shared-macros.mk
 
 COMPONENT_NAME= 	thunderbird
-COMPONENT_VERSION= 	38.8.0
+COMPONENT_VERSION= 	45.3.0
 COMPONENT_SUMMARY= 	Mozilla Thunderbird Email/Newsgroup Client
-COMPONENT_SRC= 		comm-esr38
-COMPONENT_ARCHIVE= 	$(COMPONENT_NAME)-$(COMPONENT_VERSION).source.tar.bz2
+COMPONENT_SRC= 		$(COMPONENT_NAME)-$(COMPONENT_VERSION)
+COMPONENT_ARCHIVE= 	$(COMPONENT_SRC).source.tar.xz
 COMPONENT_ARCHIVE_HASH= \
-  sha256:690b3c16fd0cedd49cd84216eeb79361262507f7302e2b0aec862cab1c473333
+  sha256:231f6a7a073344659e436a2b1ae58004c3a29e74375af2c8d0de13f3bc79fac7
 COMPONENT_ARCHIVE_URL= \
   https://ftp.mozilla.org/pub/thunderbird/releases/$(COMPONENT_VERSION)/source/$(COMPONENT_ARCHIVE)
 COMPONENT_PROJECT_URL = http://www.mozilla.com/en-US/thunderbird/
@@ -29,13 +29,13 @@ COMPONENT_PROJECT_URL = http://www.mozilla.com/en-US/thunderbird/
 LANG_LIST=	ar be bg ca cs da de el es-AR es-ES et fi fr he hr hu id is it ja ko lt nl nn-NO pl pt-BR pt-PT ro ru sk sl sq sr sv-SE tr uk vi zh-CN zh-TW
 LANG_FILES_LOCATION=	http://ftp.mozilla.org/pub/mozilla.org/thunderbird/releases/$(COMPONENT_VERSION)/linux-i686/xpi/
 
-LIGHTNING_VERSION=4.0.5.2
+LIGHTNING_VERSION=4.7
 LIGHTNING_DIR="$(PROTO_DIR)/usr/lib/thunderbird-$(COMPONENT_VERSION)/extensions/{e2fda1a4-762b-4020-b5ad-a41df1933103}"
 GDATA_PROVIDER_DIR="$(PROTO_DIR)/usr/lib/thunderbird/extensions/{a62ef8ec-5fdc-40c2-873c-223b8a6925cc}"
 
-COMPONENT_ARCHIVE_1=		lightning-$(LIGHTNING_VERSION).xpi
-COMPONENT_ARCHIVE_HASH_1=	sha256:8f37425b3d780d72793592cb238424d17543254f76ff4da6f42a7ed2a72a5868
-COMPONENT_ARCHIVE_URL_1=	https://addons.mozilla.org/thunderbird/downloads/file/389076/lightning-4.0.5.2-sm+tb-linux.xpi
+COMPONENT_ARCHIVE_1=		lightning-$(LIGHTNING_VERSION)-sm+tb-linux.xpi
+COMPONENT_ARCHIVE_HASH_1=	sha256:1f3762ac664ef8861158d32306e406e774b16cc63be5ba2be49638088742dff5
+COMPONENT_ARCHIVE_URL_1=	https://addons.cdn.mozilla.net/user-media/addons/_attachments/2313/$(COMPONENT_ARCHIVE_1)
 
 include $(WS_TOP)/make-rules/prep.mk
 include $(WS_TOP)/make-rules/configure.mk
@@ -51,14 +51,15 @@ CONFIGURE_OPTIONS +=	--enable-gnomeui
 CONFIGURE_OPTIONS +=	--enable-libxul
 CONFIGURE_OPTIONS +=	--disable-jemalloc
 CONFIGURE_OPTIONS +=	--without-intl-api
-CONFIGURE_OPTIONS +=	--disable-debug
+#CONFIGURE_OPTIONS +=	--disable-debug
+CONFIGURE_OPTIONS +=	--enable-debug
 CONFIGURE_OPTIONS +=	--disable-tests
-#CONFIGURE_OPTIONS +=	--enable-debug
-CONFIGURE_OPTIONS +=	--disable-debug-symbols
+CONFIGURE_OPTIONS +=	--enable-debug-symbols
+#CONFIGURE_OPTIONS +=	--disable-debug-symbols
 #CONFIGURE_OPTIONS +=	--enable-debug-symbols
-CONFIGURE_OPTIONS +=	--enable-install-strip
-#CONFIGURE_OPTIONS +=	--disable-install-strip
-CONFIGURE_OPTIONS +=	--enable-optimize=-O2
+#CONFIGURE_OPTIONS +=	--enable-install-strip
+CONFIGURE_OPTIONS +=	--disable-install-strip
+CONFIGURE_OPTIONS +=	--enable-optimize=-O0
 CONFIGURE_OPTIONS +=	--disable-webrtc
 CONFIGURE_OPTIONS +=	--enable-official-branding
 CONFIGURE_OPTIONS +=	--disable-updater
@@ -68,8 +69,9 @@ CONFIGURE_OPTIONS +=	--enable-system-ffi
 CONFIGURE_OPTIONS +=	--enable-gstreamer
 CONFIGURE_OPTIONS +=	--enable-system-pixman
 CONFIGURE_OPTIONS +=	--with-system-icu
+CONFIGURE_OPTIONS +=	--with-system-libvpx
 CONFIGURE_OPTIONS +=	--enable-system-sqlite
-CONFIGURE_OPTIONS +=	--enable-shared-js
+#CONFIGURE_OPTIONS +=	--enable-shared-js
 CONFIGURE_OPTIONS +=	--with-system-libevent
 CONFIGURE_OPTIONS +=	--with-system-zlib
 CONFIGURE_OPTIONS +=	--with-system-bz2
@@ -92,7 +94,7 @@ ENV +=	MOZILLA_PKG_NAME=thunderbird
 ENV +=	CXXFLAGS="$(CXXFLAGS)"
 # -L.../dist/bin needs to be set otherwise it will report missing libnss3.so, 
 # libssl3.so, etc, while linking.
-ENV +=  LDFLAGS="-z ignore -z interpose -B nodirect -L$(BUILD_DIR_32)/dist/lib"
+ENV +=  LDFLAGS="-z ignore -z interpose -B nodirect -L$(BUILD_DIR_32)/dist/lib -L$(BUILD_DIR_32)/dist/bin"
 ENV +=  OS_DEFINES="-D__USE_LEGACY_PROTOTYPES__"
 
 CONFIGURE_ENV =	$(ENV)
@@ -153,6 +155,7 @@ REQUIRED_PACKAGES += library/glib2
 REQUIRED_PACKAGES += library/graphics/pixman
 REQUIRED_PACKAGES += library/libevent2
 REQUIRED_PACKAGES += library/libffi
+#REQUIRED_PACKAGES += library/video/libvpx
 REQUIRED_PACKAGES += library/zlib
 REQUIRED_PACKAGES += system/library
 REQUIRED_PACKAGES += system/library/fontconfig

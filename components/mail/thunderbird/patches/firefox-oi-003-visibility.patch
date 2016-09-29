@@ -1,34 +1,52 @@
---- mozilla/media/libsoundtouch/src/moz.build	2016-02-12 00:29:48.000000000 +0300
-+++ mozilla/media/libsoundtouch/src/moz.build.1	2016-03-13 15:03:20.109141558 +0300
-@@ -33,8 +33,7 @@
-         SOURCES['mmx_optimized.cpp'].flags += CONFIG['MMX_FLAGS']
+--- mozilla/media/libsoundtouch/src/moz.build.1	2016-09-23 12:02:49.755464853 +0300
++++ mozilla/media/libsoundtouch/src/moz.build	2016-09-23 12:03:03.375798786 +0300
+@@ -52,3 +52,5 @@
  
- MSVC_ENABLE_PGO = True
--if CONFIG['GKMEDIAS_SHARED_LIBRARY']:
--    NO_VISIBILITY_FLAGS = True
+ # Use abort() instead of exception in SoundTouch.
+ DEFINES['ST_NO_EXCEPTION_HANDLING'] = 1
++
 +NO_VISIBILITY_FLAGS = True
- 
- FINAL_LIBRARY = 'gkmedias'
- 
---- mozilla/js/src/jsapi.cpp.1	2016-03-14 15:01:47.773526718 +0300
-+++ mozilla/js/src/jsapi.cpp	2016-03-14 15:02:08.997883828 +0300
-@@ -115,7 +115,7 @@
+--- mozilla/js/src/jsapi.cpp.~2~	2016-09-23 12:01:15.096523485 +0300
++++ mozilla/js/src/jsapi.cpp	2016-09-23 12:05:30.363408990 +0300
+@@ -113,7 +113,7 @@
  #define JS_ADDRESSOF_VA_LIST(ap) (&(ap))
  #endif
  
 -bool
 +JS_PUBLIC_API(bool)
- JS::CallArgs::requireAtLeast(JSContext* cx, const char* fnname, unsigned required) {
+ JS::CallArgs::requireAtLeast(JSContext* cx, const char* fnname, unsigned required) const
+ {
      if (length() < required) {
-         char numArgsStr[40];
---- mozilla/js/public/CallArgs.h.1	2016-03-14 19:00:33.705399590 +0300
-+++ mozilla/js/public/CallArgs.h	2016-03-14 19:00:55.152216552 +0300
-@@ -344,7 +344,7 @@
+--- mozilla/js/public/CallArgs.h.~1~	2016-09-23 12:01:15.097952392 +0300
++++ mozilla/js/public/CallArgs.h	2016-09-23 12:07:13.419880597 +0300
+@@ -351,7 +351,7 @@
       * Returns true if there are at least |required| arguments passed in. If
       * false, it reports an error message on the context.
       */
--    bool requireAtLeast(JSContext* cx, const char* fnname, unsigned required);
-+    JS_PUBLIC_API(bool) requireAtLeast(JSContext* cx, const char* fnname, unsigned required);
+-    bool requireAtLeast(JSContext* cx, const char* fnname, unsigned required) const;
++    JS_PUBLIC_API(bool) requireAtLeast(JSContext* cx, const char* fnname, unsigned required) const;
  
  };
  
+#--- mozilla/js/src/configure.1	2016-09-23 18:45:10.574743515 +0300
+#+++ mozilla/js/src/configure	2016-09-23 18:46:19.825868831 +0300
+#@@ -10312,7 +10312,7 @@
+# 
+# 
+# 
+#-if test "$GNU_CC" -a "$OS_TARGET" != WINNT; then
+#+if test "$GNU_CC" -a "$OS_TARGET" != WINNT -a "$OS_TARGET" != SunOS; then
+#   cat >> confdefs.pytmp <<\EOF
+#     (''' HAVE_VISIBILITY_HIDDEN_ATTRIBUTE ''', ' 1 ')
+# EOF
+#--- mozilla/configure.1	2016-09-24 08:19:16.150367147 +0300
+#+++ mozilla/configure	2016-09-24 08:20:02.568340325 +0300
+#@@ -11475,7 +11475,7 @@
+# cross_compiling=$ac_cv_prog_cc_cross
+# 
+# 
+#-if test "$GNU_CC" -a "$OS_TARGET" != WINNT; then
+#+if test "$GNU_CC" -a "$OS_TARGET" != WINNT -a "$OS_TARGET" != SunOS; then
+#   cat >> confdefs.pytmp <<\EOF
+#     (''' HAVE_VISIBILITY_HIDDEN_ATTRIBUTE ''', ' 1 ')
+# EOF
