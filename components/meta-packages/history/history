@@ -1098,3 +1098,6 @@ x11/server/xorg/driver/xorg-video-tseng@1.2.4,5.11-2015.0.0.0
 xvm-gui@0.5.11,5.11-2015.0.2.0
 xvm@0.5.11,5.11-2015.0.2.0
 web/library/apache/apr-util-13/apr-ldap@1.3.9,5.11-0.134 library/apr-util-13/apr-ldap@1.5.1-0.151.1.8
+library/idnkit@1.0,5.11-2016.0.1.0
+library/idnkit/header-idnkit@0.5.11,5.11-2016.0.1.0
+network/dns/idnconv@1.0,5.11-2016.0.1.0
