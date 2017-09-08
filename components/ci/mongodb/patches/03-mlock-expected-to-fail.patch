@@ -1,0 +1,21 @@
+--- mongodb/src/mongo/base/secure_allocator.cpp.1	2017-09-08 13:57:24.655944492 +0000
++++ mongodb/src/mongo/base/secure_allocator.cpp	2017-09-08 14:03:07.881820881 +0000
+@@ -240,10 +240,15 @@
+         fassertFailed(28831);
+     }
+ 
++    errno = 0;
+     if (mlock(ptr, bytes) != 0) {
+-        auto str = errnoWithPrefix("Failed to mlock");
+-        severe() << str;
+-        fassertFailed(28832);
++        // On illumos if mlock is run without PRIV_PROC_LOCK_MEMORY privilege,
++        // it will fail
++        if (errno != EPERM) {
++            auto str = errnoWithPrefix("Failed to mlock");
++            severe() << str;
++            fassertFailed(28832);
++        }
+     }
+ 
+ #if defined(MADV_DONTDUMP)
