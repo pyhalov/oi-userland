@@ -1,0 +1,252 @@
+Summary of all suites: 30 suites ran in SEC seconds
+    aggregation: No tests ran.
+    Suite did not run any tests.
+    aggregation_auth: 180 test(s) ran in SEC seconds (164 succeeded, 0 were skipped, 16 failed, 0 errored)
+    The following tests failed (with exit code):
+        jstests/aggregation/bugs/server30084.js (253)
+        jstests/aggregation/bugs/server6179.js (253)
+        jstests/aggregation/bugs/server7781.js (253)
+        jstests/aggregation/mongos_merge.js (253)
+        jstests/aggregation/mongos_slaveok.js (253)
+        jstests/aggregation/shard_targeting.js (253)
+        jstests/aggregation/sources/addFields/use_cases.js (253)
+        jstests/aggregation/sources/addFields/weather.js (253)
+        jstests/aggregation/sources/changeStream/sharded_change_stream.js (253)
+        jstests/aggregation/sources/collStats/shard_host_info.js (253)
+        jstests/aggregation/sources/facet/use_cases.js (253)
+        jstests/aggregation/sources/graphLookup/sharded.js (253)
+        jstests/aggregation/sources/lookup/lookup.js (253)
+        jstests/aggregation/sources/replaceRoot/address.js (253)
+        jstests/aggregation/testshard1.js (253)
+        jstests/aggregation/testSlave.js (253)
+    180 test(s) ran in SEC seconds (164 succeeded, 0 were skipped, 16 failed, 0 errored)
+        js_tests: 180 test(s) ran in SEC seconds (164 succeeded, 0 were skipped, 16 failed, 0 errored)
+        The following tests failed (with exit code):
+            jstests/aggregation/bugs/server30084.js (253)
+            jstests/aggregation/bugs/server6179.js (253)
+            jstests/aggregation/bugs/server7781.js (253)
+            jstests/aggregation/mongos_merge.js (253)
+            jstests/aggregation/mongos_slaveok.js (253)
+            jstests/aggregation/shard_targeting.js (253)
+            jstests/aggregation/sources/addFields/use_cases.js (253)
+            jstests/aggregation/sources/addFields/weather.js (253)
+            jstests/aggregation/sources/changeStream/sharded_change_stream.js (253)
+            jstests/aggregation/sources/collStats/shard_host_info.js (253)
+            jstests/aggregation/sources/facet/use_cases.js (253)
+            jstests/aggregation/sources/graphLookup/sharded.js (253)
+            jstests/aggregation/sources/lookup/lookup.js (253)
+            jstests/aggregation/sources/replaceRoot/address.js (253)
+            jstests/aggregation/testshard1.js (253)
+            jstests/aggregation/testSlave.js (253)
+    auth: 72 test(s) ran in SEC seconds (17 succeeded, 0 were skipped, 55 failed, 0 errored)
+    The following tests failed (with exit code):
+        jstests/auth/access_control_with_unreachable_configs.js (253)
+        jstests/auth/arbiter.js (253)
+        jstests/auth/auth_options.js (253)
+        jstests/auth/auth_schema_upgrade.js (253)
+        jstests/auth/authentication_restrictions.js (253)
+        jstests/auth/authentication_restrictions_role.js (253)
+        jstests/auth/authz_modifications_access_control.js (253)
+        jstests/auth/basic_role_auth.js (253)
+        jstests/auth/clac_system_colls.js (253)
+        jstests/auth/cluster_ip_whitelist.js (253)
+        jstests/auth/commands_builtin_roles.js (-6)
+        jstests/auth/commands_user_defined_roles.js (253)
+        jstests/auth/copyauth.js (253)
+        jstests/auth/copyauth2.js (253)
+        jstests/auth/copyauth_between_shards.js (253)
+        jstests/auth/db_multiple_login.js (253)
+        jstests/auth/disable_localhost_bypass.js (253)
+        jstests/auth/explain_auth.js (253)
+        jstests/auth/feature_compat_36_roles_collection.js (253)
+        jstests/auth/getMore.js (253)
+        jstests/auth/indexSystemUsers.js (253)
+        jstests/auth/iteration_count_control.js (253)
+        jstests/auth/js_scope_leak.js (253)
+        jstests/auth/kill_sessions.js (253)
+        jstests/auth/killop_own_ops.js (253)
+        jstests/auth/list_all_local_sessions.js (253)
+        jstests/auth/list_all_sessions.js (253)
+        jstests/auth/list_local_sessions.js (253)
+        jstests/auth/list_sessions.js (253)
+        jstests/auth/localhostAuthBypass.js (253)
+        jstests/auth/log_userid_off.js (253)
+        jstests/auth/logout_reconnect.js (253)
+        jstests/auth/mergeAuthCollsCommand.js (253)
+        jstests/auth/mongos_cache_invalidation.js (253)
+        jstests/auth/mr_auth.js (253)
+        jstests/auth/pre_auth_commands_with_sessions.js (253)
+        jstests/auth/profile.js (253)
+        jstests/auth/profile_access.js (253)
+        jstests/auth/pseudo_commands.js (253)
+        jstests/auth/readIndex.js (253)
+        jstests/auth/repl_auth.js (253)
+        jstests/auth/resource_pattern_matching.js (253)
+        jstests/auth/role_management_commands_edge_cases.js (253)
+        jstests/auth/role_management_commands_sharded_wc_1.js (253)
+        jstests/auth/role_management_commands_sharded_wc_majority.js (253)
+        jstests/auth/secondary_invalidation.js (253)
+        jstests/auth/server-4892.js (253)
+        jstests/auth/upgrade_noauth_to_keyfile.js (253)
+        jstests/auth/upgrade_noauth_to_keyfile_with_sharding.js (253)
+        jstests/auth/user_defined_roles.js (253)
+        jstests/auth/user_defined_roles_on_secondaries.js (253)
+        jstests/auth/user_management_commands_edge_cases.js (253)
+        jstests/auth/user_management_commands_sharded_wc_1.js (253)
+        jstests/auth/user_management_commands_sharded_wc_majority.js (253)
+        jstests/auth/views_authz.js (253)
+    72 test(s) ran in SEC seconds (17 succeeded, 0 were skipped, 55 failed, 0 errored)
+        js_tests: 72 test(s) ran in SEC seconds (17 succeeded, 0 were skipped, 55 failed, 0 errored)
+        The following tests failed (with exit code):
+            jstests/auth/access_control_with_unreachable_configs.js (253)
+            jstests/auth/arbiter.js (253)
+            jstests/auth/auth_options.js (253)
+            jstests/auth/auth_schema_upgrade.js (253)
+            jstests/auth/authentication_restrictions.js (253)
+            jstests/auth/authentication_restrictions_role.js (253)
+            jstests/auth/authz_modifications_access_control.js (253)
+            jstests/auth/basic_role_auth.js (253)
+            jstests/auth/clac_system_colls.js (253)
+            jstests/auth/cluster_ip_whitelist.js (253)
+            jstests/auth/commands_builtin_roles.js (-6)
+            jstests/auth/commands_user_defined_roles.js (253)
+            jstests/auth/copyauth.js (253)
+            jstests/auth/copyauth2.js (253)
+            jstests/auth/copyauth_between_shards.js (253)
+            jstests/auth/db_multiple_login.js (253)
+            jstests/auth/disable_localhost_bypass.js (253)
+            jstests/auth/explain_auth.js (253)
+            jstests/auth/feature_compat_36_roles_collection.js (253)
+            jstests/auth/getMore.js (253)
+            jstests/auth/indexSystemUsers.js (253)
+            jstests/auth/iteration_count_control.js (253)
+            jstests/auth/js_scope_leak.js (253)
+            jstests/auth/kill_sessions.js (253)
+            jstests/auth/killop_own_ops.js (253)
+            jstests/auth/list_all_local_sessions.js (253)
+            jstests/auth/list_all_sessions.js (253)
+            jstests/auth/list_local_sessions.js (253)
+            jstests/auth/list_sessions.js (253)
+            jstests/auth/localhostAuthBypass.js (253)
+            jstests/auth/log_userid_off.js (253)
+            jstests/auth/logout_reconnect.js (253)
+            jstests/auth/mergeAuthCollsCommand.js (253)
+            jstests/auth/mongos_cache_invalidation.js (253)
+            jstests/auth/mr_auth.js (253)
+            jstests/auth/pre_auth_commands_with_sessions.js (253)
+            jstests/auth/profile.js (253)
+            jstests/auth/profile_access.js (253)
+            jstests/auth/pseudo_commands.js (253)
+            jstests/auth/readIndex.js (253)
+            jstests/auth/repl_auth.js (253)
+            jstests/auth/resource_pattern_matching.js (253)
+            jstests/auth/role_management_commands_edge_cases.js (253)
+            jstests/auth/role_management_commands_sharded_wc_1.js (253)
+            jstests/auth/role_management_commands_sharded_wc_majority.js (253)
+            jstests/auth/secondary_invalidation.js (253)
+            jstests/auth/server-4892.js (253)
+            jstests/auth/upgrade_noauth_to_keyfile.js (253)
+            jstests/auth/upgrade_noauth_to_keyfile_with_sharding.js (253)
+            jstests/auth/user_defined_roles.js (253)
+            jstests/auth/user_defined_roles_on_secondaries.js (253)
+            jstests/auth/user_management_commands_edge_cases.js (253)
+            jstests/auth/user_management_commands_sharded_wc_1.js (253)
+            jstests/auth/user_management_commands_sharded_wc_majority.js (253)
+            jstests/auth/views_authz.js (253)
+    dbtest: 63 test(s) ran in SEC seconds (62 succeeded, 0 were skipped, 1 failed, 0 errored)
+    The following tests failed (with exit code):
+        json (17)
+    63 test(s) ran in SEC seconds (62 succeeded, 0 were skipped, 1 failed, 0 errored)
+        db_tests: 63 test(s) ran in SEC seconds (62 succeeded, 0 were skipped, 1 failed, 0 errored)
+        The following tests failed (with exit code):
+            json (17)
+    durability: 13 test(s) ran in SEC seconds (3 succeeded, 0 were skipped, 10 failed, 0 errored)
+    The following tests failed (with exit code):
+        jstests/dur/a_quick.js (253)
+        jstests/dur/checksum.js (253)
+        jstests/dur/dropdb.js (253)
+        jstests/dur/dur1.js (253)
+        jstests/dur/dur1_tool.js (253)
+        jstests/dur/dur2.js (253)
+        jstests/dur/journaling_options.js (253)
+        jstests/dur/lsn.js (253)
+        jstests/dur/manyRestart.js (253)
+        jstests/dur/oplog.js (253)
+    13 test(s) ran in SEC seconds (3 succeeded, 0 were skipped, 10 failed, 0 errored)
+        js_tests: 13 test(s) ran in SEC seconds (3 succeeded, 0 were skipped, 10 failed, 0 errored)
+        The following tests failed (with exit code):
+            jstests/dur/a_quick.js (253)
+            jstests/dur/checksum.js (253)
+            jstests/dur/dropdb.js (253)
+            jstests/dur/dur1.js (253)
+            jstests/dur/dur1_tool.js (253)
+            jstests/dur/dur2.js (253)
+            jstests/dur/journaling_options.js (253)
+            jstests/dur/lsn.js (253)
+            jstests/dur/manyRestart.js (253)
+            jstests/dur/oplog.js (253)
+    dur_jscore_passthrough: All 1877 test(s) passed in SEC seconds.
+    1877 test(s) ran in SEC seconds (1877 succeeded, 0 were skipped, 0 failed, 0 errored)
+        js_tests: All 1877 test(s) passed in SEC seconds.
+    failpoints: 2 test(s) ran in SEC seconds (0 succeeded, 0 were skipped, 2 failed, 0 errored)
+    The following tests failed (with exit code):
+        jstests/fail_point/fail_point.js (253)
+        jstests/fail_point/set_failpoint_through_set_parameter.js (253)
+    2 test(s) ran in SEC seconds (0 succeeded, 0 were skipped, 2 failed, 0 errored)
+        js_tests: 2 test(s) ran in SEC seconds (0 succeeded, 0 were skipped, 2 failed, 0 errored)
+        The following tests failed (with exit code):
+            jstests/fail_point/fail_point.js (253)
+            jstests/fail_point/set_failpoint_through_set_parameter.js (253)
+    failpoints_auth: 2 test(s) ran in SEC seconds (0 succeeded, 0 were skipped, 2 failed, 0 errored)
+    The following tests failed (with exit code):
+        jstests/fail_point/fail_point.js (253)
+        jstests/fail_point/set_failpoint_through_set_parameter.js (253)
+    2 test(s) ran in SEC seconds (0 succeeded, 0 were skipped, 2 failed, 0 errored)
+        js_tests: 2 test(s) ran in SEC seconds (0 succeeded, 0 were skipped, 2 failed, 0 errored)
+        The following tests failed (with exit code):
+            jstests/fail_point/fail_point.js (253)
+            jstests/fail_point/set_failpoint_through_set_parameter.js (253)
+    generational_jstestfuzz: No tests ran.
+    Suite did not run any tests.
+    jstestfuzz: No tests ran.
+    Suite did not run any tests.
+    jstestfuzz_replication: No tests ran.
+    Suite did not run any tests.
+    jstestfuzz_sharded: No tests ran.
+    Suite did not run any tests.
+    mmap: No tests ran.
+    Suite did not run any tests.
+    bulk_gle_passthrough: No tests ran.
+    Suite did not run any tests.
+    parallel: No tests ran.
+    Suite did not run any tests.
+    concurrency: No tests ran.
+    Suite did not run any tests.
+    concurrency_replication: No tests ran.
+    Suite did not run any tests.
+    concurrency_sharded: No tests ran.
+    Suite did not run any tests.
+    replica_sets: No tests ran.
+    Suite did not run any tests.
+    replica_sets_auth: No tests ran.
+    Suite did not run any tests.
+    replica_sets_jscore_passthrough: No tests ran.
+    Suite did not run any tests.
+    master_slave: No tests ran.
+    Suite did not run any tests.
+    master_slave_auth: No tests ran.
+    Suite did not run any tests.
+    master_slave_jscore_passthrough: No tests ran.
+    Suite did not run any tests.
+    sharding: No tests ran.
+    Suite did not run any tests.
+    sharding_auth: No tests ran.
+    Suite did not run any tests.
+    slow1: No tests ran.
+    Suite did not run any tests.
+    serial_run: No tests ran.
+    Suite did not run any tests.
+    sharding_jscore_passthrough: No tests ran.
+    Suite did not run any tests.
+    tool: No tests ran.
+    Suite did not run any tests.
