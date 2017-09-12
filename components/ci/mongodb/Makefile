@@ -115,11 +115,63 @@ $(INSTALL_TOOLS): $(BUILD_TOOLS) $(INSTALL_64)
 	$(CP) $(BUILD_DIR)/tools/bin/* $(PROTO_DIR)/$(MONGO_PREFIX)/bin
 	$(TOUCH) $(@)
 
+TEST_SUITES = aggregation
+TEST_SUITES += aggregation_auth
+TEST_SUITES += auth
+TEST_SUITES += dbtest
+TEST_SUITES += durability
+TEST_SUITES += dur_jscore_passthrough
+TEST_SUITES += failpoints
+TEST_SUITES += failpoints_auth
+TEST_SUITES += generational_jstestfuzz
+TEST_SUITES += jstestfuzz
+TEST_SUITES += jstestfuzz_replication
+TEST_SUITES += jstestfuzz_sharded
+TEST_SUITES += mmap
+TEST_SUITES += bulk_gle_passthrough
+TEST_SUITES += parallel
+TEST_SUITES += concurrency
+TEST_SUITES += concurrency_replication
+TEST_SUITES += concurrency_sharded
+TEST_SUITES += replica_sets
+TEST_SUITES += replica_sets_auth
+TEST_SUITES += replica_sets_jscore_passthrough
+TEST_SUITES += master_slave
+TEST_SUITES += master_slave_auth
+TEST_SUITES += master_slave_jscore_passthrough
+TEST_SUITES += sharding,sharding_auth
+TEST_SUITES += slow1
+TEST_SUITES += serial_run
+TEST_SUITES += sharding_jscore_passthrough
+TEST_SUITES += tool
+
+# A bit of magic to replace spaces with commas
+comma:= ,
+empty:=
+space:= $(empty) $(empty)
+
+COMPONENT_TEST_CMD = $(PYTHON) buildscripts/resmoke.py \
+				--continueOnFailure \
+				--staggerJobs=on \
+				--reportFailureStatus=fail \
+				--dbpathPrefix=/tmp/db \
+				--suites=$(subst $(space),$(comma),$(TEST_SUITES))
+
+COMPONENT_TEST_TARGETS =
+
+COMPONENT_TEST_TRANSFORMS +=	'-e "s/\[resmoke\][ -+0-9T:\.\-]*//"' \
+				'-e "s/\s\s*[0-9][0-9]*\.[0-9][0-9]* seconds/ SEC seconds/"' \
+				'-n ' \
+				'-e "/Summary of all suites/,\\$$p"'
+
+# Not strictly necessary, but simplifies jenkins job
+$(TEST_64):	$(INSTALL_64) $(INSTALL_TOOLS)
+
 build:		$(BUILD_64) $(BUILD_TOOLS)
 
 install:	$(INSTALL_64) $(INSTALL_TOOLS)
 
-test:		$(NO_TESTS)
+test:		$(TEST_64)
 
 REQUIRED_PACKAGES += SUNWcs
 REQUIRED_PACKAGES += developer/build/scons
