@@ -1,6 +1,18 @@
---- mongodb-src-r3.3.12/SConstruct.1	2016-09-08 23:44:50.673340313 +0300
-+++ mongodb-src-r3.3.12/SConstruct	2016-09-08 23:45:08.701896471 +0300
-@@ -1527,7 +1527,6 @@
+--- mongodb/SConstruct.~1~	2017-09-13 10:58:23.311357331 +0000
++++ mongodb/SConstruct	2017-09-13 10:59:37.554362250 +0000
+@@ -361,6 +361,11 @@
+     nargs=0,
+ )
+ 
++add_option('disable-ggdb',
++    help="Don't add -ggdb to compiler command line",
++    nargs=0,
++)
++
+ add_option('variables-help',
+     help='Print the help text for SCons variables',
+     nargs=0,
+@@ -1593,13 +1598,16 @@
      # -Winvalid-pch Warn if a precompiled header (see Precompiled Headers) is found in the search path but can't be used.
      env.Append( CCFLAGS=["-fno-omit-frame-pointer",
                           "-fno-strict-aliasing",
@@ -8,3 +20,13 @@
                           "-pthread",
                           "-Wall",
                           "-Wsign-compare",
+                          "-Wno-unknown-pragmas",
+                          "-Winvalid-pch"] )
+     # env.Append( " -Wconversion" ) TODO: this doesn't really work yet
++
++    if not has_option("disable-ggdb"):
++        env.Append( CCFLAGS=["-ggdb"] )
++
+     if env.TargetOSIs('linux', 'darwin', 'solaris'):
+         if not has_option("disable-warnings-as-errors"):
+             env.Append( CCFLAGS=["-Werror"] )

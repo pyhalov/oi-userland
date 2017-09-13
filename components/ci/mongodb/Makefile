@@ -100,6 +100,7 @@ COMPONENT_BUILD_ARGS += --ssl
 COMPONENT_BUILD_ARGS += --release
 # Fixes gcc 7 build
 COMPONENT_BUILD_ARGS += --disable-warnings-as-errors
+COMPONENT_BUILD_ARGS += --disable-ggdb
 
 COMPONENT_BUILD_TARGETS=	all
 
@@ -115,35 +116,15 @@ $(INSTALL_TOOLS): $(BUILD_TOOLS) $(INSTALL_64)
 	$(CP) $(BUILD_DIR)/tools/bin/* $(PROTO_DIR)/$(MONGO_PREFIX)/bin
 	$(TOUCH) $(@)
 
-TEST_SUITES = aggregation
-TEST_SUITES += aggregation_auth
-TEST_SUITES += auth
+TEST_SUITES += core
 TEST_SUITES += dbtest
-TEST_SUITES += durability
 TEST_SUITES += dur_jscore_passthrough
-TEST_SUITES += failpoints
-TEST_SUITES += failpoints_auth
 TEST_SUITES += generational_jstestfuzz
 TEST_SUITES += jstestfuzz
 TEST_SUITES += jstestfuzz_replication
 TEST_SUITES += jstestfuzz_sharded
-TEST_SUITES += mmap
-TEST_SUITES += bulk_gle_passthrough
-TEST_SUITES += parallel
-TEST_SUITES += concurrency
-TEST_SUITES += concurrency_replication
-TEST_SUITES += concurrency_sharded
-TEST_SUITES += replica_sets
-TEST_SUITES += replica_sets_auth
 TEST_SUITES += replica_sets_jscore_passthrough
-TEST_SUITES += master_slave
-TEST_SUITES += master_slave_auth
-TEST_SUITES += master_slave_jscore_passthrough
-TEST_SUITES += sharding,sharding_auth
-TEST_SUITES += slow1
-TEST_SUITES += serial_run
-TEST_SUITES += sharding_jscore_passthrough
-TEST_SUITES += tool
+TEST_SUITES += unittests
 
 # A bit of magic to replace spaces with commas
 comma:= ,
