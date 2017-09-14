@@ -1,17 +1,13 @@
 Summary of all suites: 9 suites ran in SEC seconds
-    core: All 1886 test(s) passed in SEC seconds.
-    1886 test(s) ran in SEC seconds (1886 succeeded, 0 were skipped, 0 failed, 0 errored)
-        js_tests: All 1886 test(s) passed in SEC seconds.
-    dbtest: 63 test(s) ran in SEC seconds (62 succeeded, 0 were skipped, 1 failed, 0 errored)
-    The following tests failed (with exit code):
-        json (17)
-    63 test(s) ran in SEC seconds (62 succeeded, 0 were skipped, 1 failed, 0 errored)
-        db_tests: 63 test(s) ran in SEC seconds (62 succeeded, 0 were skipped, 1 failed, 0 errored)
-        The following tests failed (with exit code):
-            json (17)
-    dur_jscore_passthrough: All 1877 test(s) passed in SEC seconds.
-    1877 test(s) ran in SEC seconds (1877 succeeded, 0 were skipped, 0 failed, 0 errored)
-        js_tests: All 1877 test(s) passed in SEC seconds.
+    core: All NUMBER test(s) passed in SEC seconds.
+    NUMBER test(s) ran in SEC seconds (NUMBER succeeded, 0 were skipped, 0 failed, 0 errored)
+        js_tests: All NUMBER test(s) passed in SEC seconds.
+    dbtest: All NUMBER test(s) passed in SEC seconds.
+    NUMBER test(s) ran in SEC seconds (NUMBER succeeded, 0 were skipped, 0 failed, 0 errored)
+        db_tests: All NUMBER test(s) passed in SEC seconds.
+    dur_jscore_passthrough: All NUMBER test(s) passed in SEC seconds.
+    NUMBER test(s) ran in SEC seconds (NUMBER succeeded, 0 were skipped, 0 failed, 0 errored)
+        js_tests: All NUMBER test(s) passed in SEC seconds.
     generational_jstestfuzz: No tests ran.
     Suite did not run any tests.
     jstestfuzz: No tests ran.

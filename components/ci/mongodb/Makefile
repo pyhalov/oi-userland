@@ -63,7 +63,7 @@ $(SOURCE_DIR)/.patched: $(SOURCE_DIR)/.downloaded $(PATCHES)
 	$(GIT) checkout -f && \
 	      $(GIT) clean -f
 	for p in $(PATCHES); do \
-	  $(GPATCH) -d $(@D) $(GPATCH_FLAGS) < $$p; \
+	  $(GPATCH) -d $(@D) $(GPATCH_FLAGS) < $$p || exit 1; \
 	done
 	@cd $(SOURCE_DIR); $(GIT) log -1 --format=%H > .downloaded
 	$(TOUCH) $@
@@ -142,6 +142,8 @@ COMPONENT_TEST_TARGETS =
 
 COMPONENT_TEST_TRANSFORMS +=	'-e "s/\[resmoke\][ -+0-9T:\.\-]*//"' \
 				'-e "s/\s\s*[0-9][0-9]*\.[0-9][0-9]* seconds/ SEC seconds/"' \
+				'-e "s/[0-9][0-9]* test/NUMBER test/"' \
+				'-e "s/[0-9][0-9]* succeeded/NUMBER succeeded/"' \
 				'-n ' \
 				'-e "/Summary of all suites/,\\$$p"'
 
