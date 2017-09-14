@@ -1,0 +1,75 @@
+--- mongodb/src/mongo/base/secure_allocator.cpp	2017-09-14 16:03:34.434747150 +0000
++++ mongodb/src/mongo/base/secure_allocator.cpp	2017-09-14 16:03:05.475984550 +0000
+@@ -39,6 +39,9 @@
+ #include <sys/mman.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
++#ifdef __sun__
++#include <priv.h>
++#endif
+ #endif
+ 
+ #include "mongo/base/disallow_copying.h"
+@@ -219,6 +222,33 @@
+ #error "Could not determine a way to map anonymous memory, required for secure allocation"
+ #endif
+ 
++static int  check_mlock_privs() {
++#ifdef __sun__
++    int result = 0;
++    priv_set_t *privset = NULL;
++  
++    if ((privset = priv_allocset()) == NULL) {
++       return 0;
++    }
++  
++    if (getppriv(PRIV_EFFECTIVE, privset) < 0) {
++       priv_freeset(privset);
++       return 0;
++    }
++  
++    if (priv_ismember(privset, PRIV_PROC_LOCK_MEMORY)) {
++       result = 1;
++    }
++  
++    priv_freeset(privset);
++#else 
++    int result  = 1;
++#endif
++  
++    return result;
++}
++
++
+ void* systemAllocate(std::size_t bytes) {
+     // Flags:
+     //
+@@ -233,6 +263,8 @@
+     // skipping flags like MAP_LOCKED and MAP_POPULATE as linux-isms
+     auto ptr =
+         mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MONGO_MAP_ANONYMOUS, -1, 0);
++    
++    static int canMlock = check_mlock_privs();
+ 
+     if (!ptr) {
+         auto str = errnoWithPrefix("Failed to mmap");
+@@ -240,7 +272,7 @@
+         fassertFailed(28831);
+     }
+ 
+-    if (mlock(ptr, bytes) != 0) {
++    if (canMlock && mlock(ptr, bytes) != 0) {
+         auto str = errnoWithPrefix("Failed to mlock");
+         severe() << str;
+         fassertFailed(28832);
+@@ -261,7 +293,9 @@
+     (void)madvise(ptr, bytes, MADV_DODUMP);
+ #endif
+ 
+-    if (munlock(ptr, bytes) != 0) {
++    static int canMunlock = check_mlock_privs();
++
++    if (canMunlock && munlock(ptr, bytes) != 0) {
+         severe() << errnoWithPrefix("Failed to munlock");
+         fassertFailed(28833);
+     }
