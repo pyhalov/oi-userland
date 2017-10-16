@@ -1,0 +1,11 @@
+--- gettext-setup-gem-0.28/gettext-setup.gemspec.1	2017-10-16 12:44:53.427648561 +0000
++++ gettext-setup-gem-0.28/gettext-setup.gemspec	2017-10-16 12:45:13.424702397 +0000
+@@ -5,7 +5,7 @@
+ 
+ Gem::Specification.new do |spec|
+   spec.name          = 'gettext-setup'
+-  spec.version       = `git describe --tags`.tr('-', '.').chomp
++  spec.version       = '0.28'
+   spec.authors       = ['Puppet']
+   spec.email         = ['info@puppet.com']
+   spec.description   = 'A gem to ease i18n'
