@@ -164,9 +164,9 @@ diff -urN upower-0.99.4-orig/src/illumos/up-acpi-native.h upower-0.99.4/src/illu
 +
 +#endif
 diff -urN upower-0.99.4-orig/src/illumos/up-backend.c upower-0.99.4/src/illumos/up-backend.c
---- upower-0.99.4/src/illumos/up-backend.c.~1~	2017-12-30 16:48:01.336548304 +0000
-+++ upower-0.99.4/src/illumos/up-backend.c	2017-12-30 17:10:56.803334115 +0000
-@@ -0,0 +1,866 @@
+--- upower-0.99.4/src/illumos/up-backend.c.~1~	2017-12-30 17:28:05.953796719 +0000
++++ upower-0.99.4/src/illumos/up-backend.c	2017-12-30 18:03:51.063905623 +0000
+@@ -0,0 +1,878 @@
 +/* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*-
 + *
 + * Copyright (C) 2011 Landry Breuil <landry@openbsd.org>
@@ -229,10 +229,8 @@ diff -urN upower-0.99.4-orig/src/illumos/up-backend.c upower-0.99.4/src/illumos/
 +
 +static sysevent_handle_t *shp;
 +static void		up_backend_sysevent_dev_handler(sysevent_t *ev);
-+static gboolean		sysevent_iochannel_data(GIOChannel *, GIOCondition, gpointer);
 +static void		up_backend_initialize_sysevent_handler(UpBackend *backend);
 +static int		sysevent_pipe_fds[2];
-+static GIOChannel	*sysevent_iochannel;
 +
 +#define UP_BACKEND_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), UP_TYPE_BACKEND, UpBackendPrivate))
 +
@@ -241,6 +239,7 @@ diff -urN upower-0.99.4-orig/src/illumos/up-backend.c upower-0.99.4/src/illumos/
 +	UpDaemon		*daemon;
 +	UpDevice		*ac;
 +	UpDevice		*battery;
++	GThread			*monitor_thread;
 +	gboolean		is_laptop;
 +	UpConfig		*config;
 +	GDBusProxy		*seat_manager_proxy;
@@ -613,6 +612,21 @@ diff -urN upower-0.99.4-orig/src/illumos/up-backend.c upower-0.99.4/src/illumos/
 +	return FALSE;
 +}
 +
++/* callback updating the device */
++static gboolean
++up_backend_powerchange_event_cb(gpointer object)
++{
++	UpBackend *backend;
++	
++	g_return_val_if_fail (UP_IS_BACKEND (object), FALSE);
++	backend = UP_BACKEND (object);
++	up_acpi_device_refresh(backend->priv->ac);
++	up_acpi_device_refresh(backend->priv->battery);
++	/* return false to not endless loop */
++	return FALSE;
++}
++
++
 +static gboolean
 +up_acpi_device_refresh(UpDevice* device)
 +{
@@ -668,25 +682,6 @@ diff -urN upower-0.99.4-orig/src/illumos/up-backend.c upower-0.99.4/src/illumos/
 +		g_free(ma.device_path);
 +}
 +
-+static gboolean
-+sysevent_iochannel_data(GIOChannel *source, GIOCondition condition, gpointer user_data)
-+{
-+        GError *err = NULL;
-+        gchar *s = NULL;
-+        gsize len;
-+	UpBackend *backend;
-+
-+	backend = UP_BACKEND(user_data);
-+
-+        while (g_io_channel_read_line (sysevent_iochannel, &s, &len, NULL,
-+            &err) == G_IO_STATUS_NORMAL) {
-+		up_acpi_device_refresh(backend->priv->ac);
-+                up_acpi_device_refresh(backend->priv->battery);
-+	}
-+
-+	return TRUE;
-+}
-+
 +static void
 +up_backend_sysevent_dev_handler(sysevent_t *ev) {
 +	char *class;
@@ -706,20 +701,11 @@ diff -urN upower-0.99.4-orig/src/illumos/up-backend.c upower-0.99.4/src/illumos/
 +static void
 +up_backend_initialize_sysevent_handler(UpBackend *backend) {
 +	const char *subcl[6];
-+	GError *err = NULL;
 +	
 +	if (pipe(sysevent_pipe_fds) != 0) {
 +		g_warning("Failed to initialize sysevent pipe");
 +		return;
 +	}
-+
-+	sysevent_iochannel = g_io_channel_unix_new (sysevent_pipe_fds[0]);
-+        if (sysevent_iochannel == NULL) {
-+		g_warning("Failed to create sysevent iochannel");
-+                return;
-+        }
-+	g_io_channel_set_flags (sysevent_iochannel, G_IO_FLAG_NONBLOCK, &err);
-+	g_io_add_watch (sysevent_iochannel, G_IO_IN, sysevent_iochannel_data, backend);
 +
 +	shp = sysevent_bind_handle(up_backend_sysevent_dev_handler);
 +	if (shp == NULL) {
@@ -740,6 +726,26 @@ diff -urN upower-0.99.4-orig/src/illumos/up-backend.c upower-0.99.4/src/illumos/
 +		return;
 +	}
 +}
++
++static gpointer
++up_backend_monitor_thread(gpointer object)
++{
++	char buf[2];
++	UpBackend *backend;
++	
++	g_return_val_if_fail (UP_IS_BACKEND (object), NULL);
++	backend = UP_BACKEND (object);
++	
++	g_debug("setting up monitor thread");
++	
++	/* blocking wait on sysevent pipe */
++	while (read(sysevent_pipe_fds[0], buf, 2)>0) {
++		g_idle_add((GSourceFunc) up_backend_powerchange_event_cb, backend);
++	}
++	return NULL;
++	/* shouldnt be reached ? */
++}
++
 +
 +
 +/**
@@ -789,6 +795,7 @@ diff -urN upower-0.99.4-orig/src/illumos/up-backend.c upower-0.99.4/src/illumos/
 +static void
 +up_backend_init (UpBackend *backend)
 +{
++	GError *err = NULL;
 +	UpDeviceClass *device_class;
 +	gint64 current_time;
 +
@@ -829,7 +836,12 @@ diff -urN upower-0.99.4-orig/src/illumos/up-backend.c upower-0.99.4/src/illumos/
 +			      (void*) NULL);
 +
 +		/* Initialize sysevent handler */
-+		up_backend_initialize_sysevent_handler(backend);
++		up_backend_initialize_sysevent_handler(g_object_ref(backend));
++		if((backend->priv->monitor_thread = (GThread*) g_thread_try_new("sysevent-pipe-poller",(GThreadFunc)up_backend_monitor_thread, (void*) backend, &err) == NULL))
++                {
++                        g_warning("Thread create failed: %s", err->message);
++                        g_error_free (err);
++                }
 +		
 +	}
 +
