@@ -496,7 +496,7 @@ export CCACHE := $(shell \
         fi; \
     fi)
 
-GCC_ROOT =	/usr/gcc/4.9
+GCC_ROOT =	/usr/gcc/6
 
 CC.studio.32 =	$(SPRO_VROOT)/bin/cc
 CXX.studio.32 =	$(SPRO_VROOT)/bin/CC
