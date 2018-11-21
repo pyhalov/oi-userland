@@ -1,0 +1,121 @@
+--- libiconv-1.15/tests/Makefile.in.~2~	2018-11-21 08:55:38.442366574 +0000
++++ libiconv-1.15/tests/Makefile.in	2018-11-21 09:08:35.522550546 +0000
+@@ -31,21 +31,10 @@
+ check : all table-from table-to test-shiftseq test-to-wchar
+ 	$(srcdir)/check-stateless $(srcdir) ASCII
+ #	/* General multi-byte encodings */
+-	$(CC) $(LDFLAGS) $(INCLUDES) $(CFLAGS) $(CPPFLAGS) $(srcdir)/genutf8.c ../srclib/libicrt.a -o genutf8 && \
++	$(CC) $(LDFLAGS) $(INCLUDES) $(CFLAGS) $(CPPFLAGS) $(srcdir)/genutf8.c  -o genutf8 && \
+ 	./genutf8 > UTF-8.TXT && \
+ 	$(srcdir)/check-stateless . UTF-8 && \
+ 	$(RM) -r genutf8@EXEEXT@ genutf8.dSYM UTF-8.TXT
+-	$(srcdir)/check-stateful $(srcdir) UCS-2BE
+-	$(srcdir)/check-stateful $(srcdir) UCS-2LE
+-	$(srcdir)/check-stateful $(srcdir) UCS-4BE
+-	$(srcdir)/check-stateful $(srcdir) UCS-4LE
+-	$(srcdir)/check-stateful $(srcdir) UTF-16
+-	$(srcdir)/check-stateful $(srcdir) UTF-16BE
+-	$(srcdir)/check-stateful $(srcdir) UTF-16LE
+-	$(srcdir)/check-stateful $(srcdir) UTF-32
+-	$(srcdir)/check-stateful $(srcdir) UTF-32BE
+-	$(srcdir)/check-stateful $(srcdir) UTF-32LE
+-	$(srcdir)/check-stateful $(srcdir) UTF-7
+ #	/* 8-bit encodings */
+ 	$(srcdir)/check-stateless $(srcdir) ISO-8859-1
+ 	$(srcdir)/check-stateless $(srcdir) ISO-8859-2
+@@ -71,11 +60,9 @@
+ 	$(srcdir)/check-stateless $(srcdir) CP1253
+ 	$(srcdir)/check-stateless $(srcdir) CP1254
+ 	$(srcdir)/check-stateless $(srcdir) CP1255
+-	$(srcdir)/check-stateful $(srcdir) CP1255
+ 	$(srcdir)/check-stateless $(srcdir) CP1256
+ 	$(srcdir)/check-stateless $(srcdir) CP1257
+ 	$(srcdir)/check-stateless $(srcdir) CP1258
+-	$(srcdir)/check-stateful $(srcdir) CP1258
+ 	$(srcdir)/check-stateless $(srcdir) CP850
+ 	$(srcdir)/check-stateless $(srcdir) CP862
+ 	$(srcdir)/check-stateless $(srcdir) CP866
+@@ -106,7 +93,6 @@
+ 	$(srcdir)/check-stateless $(srcdir) CP874
+ 	$(srcdir)/check-stateless $(srcdir) VISCII
+ 	$(srcdir)/check-stateless $(srcdir) TCVN
+-	$(srcdir)/check-stateful $(srcdir) TCVN
+ #	/* CJK character sets */
+ 	$(srcdir)/check-stateless $(srcdir) ISO646-JP
+ 	$(srcdir)/check-stateless $(srcdir) JIS_X0201
+@@ -120,37 +106,25 @@
+ 	$(srcdir)/check-stateless $(srcdir) EUC-JP
+ 	$(srcdir)/check-stateless $(srcdir) SHIFT_JIS
+ 	$(srcdir)/check-stateless $(srcdir) CP932
+-	$(srcdir)/check-stateful $(srcdir) ISO-2022-JP
+-	$(srcdir)/check-stateful $(srcdir) ISO-2022-JP-2
+-	$(srcdir)/check-stateful $(srcdir) ISO-2022-JP-1
+-	$(srcdir)/check-stateful $(srcdir) ISO-2022-JP-MS
+ 	$(srcdir)/check-stateless $(srcdir) EUC-CN
+ 	$(srcdir)/check-stateless $(srcdir) GBK
+ 	$(srcdir)/check-stateless $(srcdir) CP936
+-	$(CC) $(LDFLAGS) $(INCLUDES) $(CFLAGS) $(CPPFLAGS) $(srcdir)/gengb18030z.c ../srclib/libicrt.a -o gengb18030z && \
++	$(CC) $(LDFLAGS) $(INCLUDES) $(CFLAGS) $(CPPFLAGS) $(srcdir)/gengb18030z.c  -o gengb18030z && \
+ 	{ cat $(srcdir)/GB18030-BMP.TXT ; ./gengb18030z ; } | sort > GB18030.TXT && \
+ 	{ test $(srcdir) = . || cp $(srcdir)/GB18030.IRREVERSIBLE.TXT GB18030.IRREVERSIBLE.TXT; } && \
+ 	$(srcdir)/check-stateless . GB18030 && \
+ 	{ test $(srcdir) = . || $(RM) GB18030.IRREVERSIBLE.TXT; } && \
+ 	$(RM) -r gengb18030z@EXEEXT@ gengb18030z.dSYM GB18030.TXT
+-	$(srcdir)/check-stateful $(srcdir) ISO-2022-CN
+-	$(srcdir)/check-stateful $(srcdir) ISO-2022-CN-EXT
+-	$(srcdir)/check-stateful $(srcdir) HZ
+ 	$(srcdir)/check-stateless $(srcdir) EUC-TW
+ 	$(srcdir)/check-stateless $(srcdir) BIG5
+ 	$(srcdir)/check-stateless $(srcdir) CP950
+ 	$(srcdir)/check-stateless $(srcdir) BIG5-HKSCS:1999
+-	$(srcdir)/check-stateful $(srcdir) BIG5-HKSCS:1999
+ 	$(srcdir)/check-stateless $(srcdir) BIG5-HKSCS:2001
+-	$(srcdir)/check-stateful $(srcdir) BIG5-HKSCS:2001
+ 	$(srcdir)/check-stateless $(srcdir) BIG5-HKSCS:2004
+-	$(srcdir)/check-stateful $(srcdir) BIG5-HKSCS:2004
+ 	$(srcdir)/check-stateless $(srcdir) BIG5-HKSCS:2008
+-	$(srcdir)/check-stateful $(srcdir) BIG5-HKSCS:2008
+ 	$(srcdir)/check-stateless $(srcdir) EUC-KR
+ 	$(srcdir)/check-stateless $(srcdir) CP949
+ 	$(srcdir)/check-stateless $(srcdir) JOHAB
+-	$(srcdir)/check-stateful $(srcdir) ISO-2022-KR
+ #	/* system dependent and extra encodings */
+ 	$(MAKE) check-extra
+ #	/* transliteration */
+@@ -200,32 +174,31 @@
+ #	/* Extra encodings */
+ 	$(srcdir)/check-stateless $(srcdir) EUC-JISX0213
+ 	$(srcdir)/check-stateless $(srcdir) SHIFT_JISX0213
+-	$(srcdir)/check-stateful $(srcdir) ISO-2022-JP-3
+ 	$(srcdir)/check-stateless $(srcdir) BIG5-2003
+ 	$(srcdir)/check-stateless $(srcdir) TDS565
+ 	$(srcdir)/check-stateless $(srcdir) ATARIST
+ 	$(srcdir)/check-stateless $(srcdir) RISCOS-LATIN1
+ 
+ table-from : table-from.@OBJEXT@
+-	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) table-from.@OBJEXT@ ../srclib/libicrt.a -o $@
++	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) table-from.@OBJEXT@  -o $@
+ 
+ table-from.@OBJEXT@ : $(srcdir)/table-from.c
+ 	$(CC) -c $(INCLUDES) $(CFLAGS) $(CPPFLAGS) $(srcdir)/table-from.c
+ 
+ table-to : table-to.@OBJEXT@
+-	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) table-to.@OBJEXT@ ../srclib/libicrt.a -o $@
++	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) table-to.@OBJEXT@  -o $@
+ 
+ table-to.@OBJEXT@ : $(srcdir)/table-to.c
+ 	$(CC) -c $(INCLUDES) $(CFLAGS) $(CPPFLAGS) $(srcdir)/table-to.c
+ 
+ test-shiftseq : test-shiftseq.@OBJEXT@
+-	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) test-shiftseq.@OBJEXT@ ../srclib/libicrt.a -o $@
++	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) test-shiftseq.@OBJEXT@  -o $@
+ 
+ test-shiftseq.@OBJEXT@ : $(srcdir)/test-shiftseq.c
+ 	$(CC) -c $(INCLUDES) $(CFLAGS) $(CPPFLAGS) $(srcdir)/test-shiftseq.c
+ 
+ test-to-wchar : test-to-wchar.@OBJEXT@
+-	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) test-to-wchar.@OBJEXT@ ../srclib/libicrt.a -o $@
++	$(LIBTOOL_LINK) $(CC) $(LDFLAGS) $(CFLAGS) test-to-wchar.@OBJEXT@  -o $@
+ 
+ test-to-wchar.@OBJEXT@ : $(srcdir)/test-to-wchar.c
+ 	$(CC) -c $(INCLUDES) $(CFLAGS) $(CPPFLAGS) $(srcdir)/test-to-wchar.c

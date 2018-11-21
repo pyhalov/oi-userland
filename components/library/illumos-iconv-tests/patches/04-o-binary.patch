@@ -1,0 +1,11 @@
+--- libiconv-1.15/srclib/binary-io.h	2017-01-02 02:02:20.000000000 +0000
++++ libiconv-1.15/srclib/binary-io.h	2018-11-20 10:32:22.578837923 +0000
+@@ -54,7 +54,7 @@
+ {
+   (void) fd;
+   (void) mode;
+-  return O_BINARY;
++  return 0;
+ }
+ #endif
+ 

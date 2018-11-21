@@ -1,0 +1,64 @@
+#
+# CDDL HEADER START
+#
+# The contents of this file are subject to the terms of the
+# Common Development and Distribution License (the "License").
+# You may not use this file except in compliance with the License.
+#
+# You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
+# or http://www.opensolaris.org/os/licensing.
+# See the License for the specific language governing permissions
+# and limitations under the License.
+#
+# When distributing Covered Code, include this CDDL HEADER in each
+# file and include the License file at usr/src/OPENSOLARIS.LICENSE.
+# If applicable, add the following below this CDDL HEADER, with the
+# fields enclosed by brackets "[]" replaced with your own identifying
+# information: Portions Copyright [yyyy] [name of copyright owner]
+#
+# CDDL HEADER END
+#
+# Copyright 2011 EveryCity Ltd. All rights reserved.
+# Copyright 2013 David Hoeppner. All rights reserved.
+#
+include ../../../make-rules/shared-macros.mk
+
+COMPONENT_NAME=		libiconv
+COMPONENT_VERSION=	1.15
+COMPONENT_SRC=		$(COMPONENT_NAME)-$(COMPONENT_VERSION)
+COMPONENT_ARCHIVE=	$(COMPONENT_SRC).tar.gz
+COMPONENT_ARCHIVE_HASH=	\
+   sha256:ccf536620a45458d26ba83887a983b96827001e92a13847b45e4925cc8913178
+COMPONENT_ARCHIVE_URL=	http://ftp.gnu.org/pub/gnu/libiconv/$(COMPONENT_ARCHIVE)
+
+include $(WS_MAKE_RULES)/prep.mk
+include $(WS_MAKE_RULES)/configure.mk
+include $(WS_MAKE_RULES)/ips.mk
+
+COMPONENT_PREP_ACTION = (cd $(SOURCE_DIR)&& autoconf -i)
+
+COMPONENT_PRE_CONFIGURE_ACTION = (cp -rp  $(SOURCE_DIR)/* $(@D))
+
+CONFIGURE_OPTIONS  +=		--disable-static
+CONFIGURE_OPTIONS  +=		--enable-shared
+
+$(INSTALL_32): COMPONENT_POST_INSTALL_ACTION = \
+	/usr/bin/elfedit -e "dyn:runpath ''" $(PROTOUSRBINDIR)/iconv
+
+$(INSTALL_64): COMPONENT_POST_INSTALL_ACTION = \
+	/usr/bin/elfedit -e "dyn:runpath ''" $(PROTOUSRBINDIR64)/iconv
+
+COMPONENT_BUILD_TARGETS = check
+COMPONENT_BUILD_GMAKE_ARGS = -k
+
+$(BUILD_32_and_64):	GMAKE=true
+
+# common targets
+build:		$(BUILD_32_and_64)
+
+install:	$(INSTALL_32_and_64)
+
+test: 		$(TEST_32_and_64)
+
+# Auto-generated dependencies
+REQUIRED_PACKAGES += system/library

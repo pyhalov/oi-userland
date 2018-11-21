@@ -1,0 +1,38 @@
+--- libiconv-1.15/Makefile.in.~1~	2016-12-04 22:20:39.000000000 +0000
++++ libiconv-1.15/Makefile.in	2018-11-21 08:55:03.705394465 +0000
+@@ -30,12 +30,12 @@
+ SHELL = /bin/sh
+ 
+ all : lib/localcharset.h force
+-	cd lib && $(MAKE) all
+-	cd preload && $(MAKE) all
+-	cd srclib && $(MAKE) all
++#	cd lib && $(MAKE) all
++#	cd preload && $(MAKE) all
++#	cd srclib && $(MAKE) all
+ 	cd src && $(MAKE) all
+-	cd po && $(MAKE) all
+-	cd man && $(MAKE) all
++#	cd po && $(MAKE) all
++#	cd man && $(MAKE) all
+ 	if test -d tests; then cd tests && $(MAKE) all; fi
+ 
+ lib/localcharset.h :
+@@ -90,15 +90,8 @@
+ 	cd po && $(MAKE) uninstall prefix='$(prefix)' exec_prefix='$(exec_prefix)' datarootdir='$(datarootdir)' datadir='$(datadir)'
+ 	cd man && $(MAKE) uninstall prefix='$(prefix)' exec_prefix='$(exec_prefix)' datarootdir='$(datarootdir)' datadir='$(datadir)' mandir='$(mandir)'
+ 
+-check : all force
+-	cd libcharset && $(MAKE) check
+-	cd lib && $(MAKE) check
+-	cd preload && $(MAKE) check
+-	cd srclib && $(MAKE) check
+-	cd src && $(MAKE) check
+-	cd po && $(MAKE) check
+-	cd man && $(MAKE) check
+-	if test -d tests; then cd tests && $(MAKE) check; fi
++check : force
++	if test -d tests; then cd tests && $(MAKE) -k check; fi
+ 
+ mostlyclean : force
+ 	cd libcharset && $(MAKE) mostlyclean

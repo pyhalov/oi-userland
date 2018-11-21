@@ -1,0 +1,9 @@
+--- ../gnu-iconv/libiconv-1.15/configure.ac	2016-12-04 15:33:04.000000000 +0000
++++ libiconv-1.15/configure.ac	2018-11-20 10:24:54.463009200 +0000
+@@ -208,6 +208,4 @@
+ if test -d "${srcdir}/tests"; then
+   AC_CONFIG_FILES([tests/Makefile])
+ fi
+-AC_CONFIG_FILES([include/iconv.h:include/iconv.h.build.in])
+-AC_CONFIG_FILES([include/iconv.h.inst:include/iconv.h.in])
+ AC_OUTPUT

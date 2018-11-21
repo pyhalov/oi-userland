@@ -1,0 +1,22 @@
+--- libiconv-1.15/tests/table-from.c.1	2018-11-21 09:15:49.856674809 +0000
++++ libiconv-1.15/tests/table-from.c	2018-11-21 09:16:07.559032946 +0000
+@@ -111,7 +111,7 @@
+   SET_BINARY(fileno(stdout));
+ #endif
+ 
+-  cd = iconv_open("UCS-4-INTERNAL",charset);
++  cd = iconv_open("UCS-4LE",charset);
+   if (cd == (iconv_t)(-1)) {
+     perror("iconv_open");
+     exit(1);
+--- libiconv-1.15/tests/table-to.c.1	2018-11-21 09:16:58.678633728 +0000
++++ libiconv-1.15/tests/table-to.c	2018-11-21 09:17:21.721638631 +0000
+@@ -44,7 +44,7 @@
+   SET_BINARY(fileno(stdout));
+ #endif
+ 
+-  cd = iconv_open(charset,"UCS-4-INTERNAL");
++  cd = iconv_open(charset,"UCS-4LE");
+   if (cd == (iconv_t)(-1)) {
+     perror("iconv_open");
+     exit(1);

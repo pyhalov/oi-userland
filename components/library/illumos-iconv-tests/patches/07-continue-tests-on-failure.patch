@@ -1,0 +1,28 @@
+--- libiconv-1.15/tests/check-stateless.~1~	2009-06-21 15:17:33.000000000 +0000
++++ libiconv-1.15/tests/check-stateless	2018-11-21 09:22:36.646474244 +0000
+@@ -9,13 +9,13 @@
+ charsetf=`echo "$charset" | sed -e 's,:,-,g'`
+ 
+ # iconv in one direction.
+-./table-from "$charset" > tmp-"$charsetf".TXT
++./table-from "$charset" > tmp-"$charsetf".TXT || { printf "failed\n"; exit 0; }
+ 
+ # iconv in the other direction.
+-./table-to "$charset" | sort > tmp-"$charsetf".INVERSE.TXT
++./table-to "$charset" | sort > tmp-"$charsetf".INVERSE.TXT || { printf "failed\n"; exit 0; }
+ 
+ # Check 1: charmap and iconv forward should be identical.
+-cmp "${srcdir}"/"$charsetf".TXT tmp-"$charsetf".TXT 2> /dev/null
++diff -u "${srcdir}"/"$charsetf".TXT tmp-"$charsetf".TXT || { printf "failed\n"; exit 0; }
+ 
+ # Check 2: the difference between the charmap and iconv backward.
+ sed -e '/	.* 0x/d' < "${srcdir}"/"$charsetf".TXT > tmp-noprecomposed-"$charsetf".TXT
+@@ -24,7 +24,7 @@
+ else
+   cp tmp-noprecomposed-"$charsetf".TXT tmp-orig-"$charsetf".INVERSE.TXT
+ fi
+-cmp tmp-orig-"$charsetf".INVERSE.TXT tmp-"$charsetf".INVERSE.TXT 2> /dev/null
++diff -u tmp-orig-"$charsetf".INVERSE.TXT tmp-"$charsetf".INVERSE.TXT || { print "failed\n"; exit 0; }
+ 
+ rm -f tmp-"$charsetf".TXT tmp-"$charsetf".INVERSE.TXT tmp-noprecomposed-"$charsetf".TXT tmp-orig-"$charsetf".INVERSE.TXT
+ exit 0
