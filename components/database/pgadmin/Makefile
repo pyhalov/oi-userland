@@ -10,49 +10,62 @@
 #
 
 #
-# Copyright 2013 Alexander Pyhalov.  All rights reserved.
+# Copyright 2019 Alexander Pyhalov
 #
+
+BUILD_BITS=64
+BUILD_STYLE=justmake
 
 include ../../../make-rules/shared-macros.mk
 
-COMPONENT_NAME= 	pgadmin3
-COMPONENT_VERSION= 	1.22.2
-COMPONENT_SUMMARY= 	pgAdminIII administration and development GUI for PostgreSQL
+COMPONENT_NAME= 	pgadmin4
+COMPONENT_VERSION= 	4.15
+COMPONENT_SUMMARY= 	pgAdmin4 administration and development GUI for PostgreSQL
 COMPONENT_SRC= 		$(COMPONENT_NAME)-$(COMPONENT_VERSION)
 COMPONENT_ARCHIVE= 	$(COMPONENT_SRC).tar.gz
 COMPONENT_ARCHIVE_HASH= \
-  sha256:9b68b0e3d3f0a261344fb8196825967d1e7acaca1d8cc82c42e12368ca5844ac
+  sha256:3131299953bf402b3d5d523c478c942dfb0ba619404a02c60908e467ca0d42bc
 COMPONENT_ARCHIVE_URL= \
-  http://ftp.postgresql.org/pub/pgadmin/pgadmin3/v$(COMPONENT_VERSION)/src/$(COMPONENT_ARCHIVE)
+  http://ftp.postgresql.org/pub/pgadmin/pgadmin4/v$(COMPONENT_VERSION)/source/$(COMPONENT_ARCHIVE)
 COMPONENT_PROJECT_URL = http://www.pgadmin.org
 
+PYTHON_VERSION=3.5
+
+QTDIR=/usr/lib/qt/5.8
+QTPATH.32=$(QTDIR)/bin
+QTPATH.64=$(QTDIR)/bin/$(MACH64)
+
 # Don't depend on host default pg_config
-PATH=$(PG_BINDIR.$(BITS)):/usr/sbin:/usr/bin
+PATH=$(PG_BINDIR.$(BITS)):$(QTPATH.$(BITS)):/usr/sbin:/usr/bin
 
 LDFLAGS+=   -L$(PG_LIBDIR.$(BITS))   -R$(PG_LIBDIR.$(BITS))
 LDFLAGS+=   -lsocket -lnsl
 
 CONFIGURE_OPTIONS += --with-pgsql=$(PG_HOME)
 
-include $(WS_MAKE_RULES)/prep.mk
-include $(WS_MAKE_RULES)/configure.mk
-include $(WS_MAKE_RULES)/ips.mk
+TEST_TARGET=$(NO_TESTS)
+include $(WS_MAKE_RULES)/common.mk
 
-COMPONENT_PRE_CONFIGURE_ACTION= (cp -a $(SOURCE_DIR)/* $(@D))
+QMAKE=$(QTPATH.$(BITS))/qmake
 
 COMPONENT_BUILD_ENV+= LDFLAGS="$(LDFLAGS)"
+COMPONENT_BUILD_ENV+= PYTHON_CONFIG=/usr/bin/python$(PYTHON_VERSION)-config
 
-build: $(BUILD_32)
+COMPONENT_PRE_BUILD_ACTION = \
+        cd $(@D)/runtime; $(ENV) $(COMPONENT_BUILD_ENV) \
+        $(QMAKE) CONFIG+=release QMAKE_CC="$(CC)" QMAKE_CXX="$(CXX)"
 
-install: $(INSTALL_32)
+COMPONENT_BUILD_ACTION = \
+        cd $(@D)/runtime; $(ENV) $(COMPONENT_BUILD_ENV) \
+	$(GMAKE)
 
-REQUIRED_PACKAGES += database/postgres-94/library
-REQUIRED_PACKAGES += library/graphics/wxwidgets
-REQUIRED_PACKAGES += library/libxml2
-REQUIRED_PACKAGES += library/libxslt
-REQUIRED_PACKAGES += library/security/openssl
-REQUIRED_PACKAGES += library/zlib
-REQUIRED_PACKAGES += system/library
-REQUIRED_PACKAGES += $(GXX_RUNTIME_PKG)
+COMPONENT_INSTALL_ACTION = \
+	$(MKDIR) $(PROTO_DIR)/usr/bin &&\
+	$(CP) $(@D)/runtime/pgAdmin4 $(PROTO_DIR)/usr/bin
+
+# Auto-generated dependencies
 REQUIRED_PACKAGES += $(GCC_RUNTIME_PKG)
-REQUIRED_PACKAGES += system/library/math
+REQUIRED_PACKAGES += $(GXX_RUNTIME_PKG)
+REQUIRED_PACKAGES += library/qt5
+REQUIRED_PACKAGES += runtime/python-35
+REQUIRED_PACKAGES += system/library

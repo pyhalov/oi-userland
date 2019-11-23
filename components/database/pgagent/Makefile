@@ -13,15 +13,17 @@
 # Copyright 2017 Alexander Pyhalov
 #
 
+BUILD_BITS=64
+BUILD_STYLE=cmake
 include ../../../make-rules/shared-macros.mk
 
 COMPONENT_NAME= 	pgAgent
-COMPONENT_VERSION= 	3.4.0
+COMPONENT_VERSION= 	4.0.0
 COMPONENT_SUMMARY= 	pgAgent job scheduler for PostgreSQL
 COMPONENT_SRC= 		$(COMPONENT_NAME)-$(COMPONENT_VERSION)-Source
 COMPONENT_ARCHIVE= 	$(COMPONENT_SRC).tar.gz
 COMPONENT_ARCHIVE_HASH= \
-  sha256:0da0ac8f453cf34ab6f708eee036bed0fd0e5fa311de283b92d2ff06600bbb3d
+  sha256:57bd047401629533ac6c5238bc94026f0ea0bf9f1f33a2bccc754b27132ea7e8
 COMPONENT_ARCHIVE_URL= \
   https://ftp.postgresql.org/pub/pgadmin/pgagent/$(COMPONENT_ARCHIVE)
 COMPONENT_PROJECT_URL = http://www.pgadmin.org/
@@ -33,20 +35,14 @@ COMPONENT_LICENSE_FILE=	LICENSE
 # Don't depend on host default pg_config
 PATH=		$(PG_BINDIR.$(BITS)):/usr/sbin:/usr/bin
 
-include $(WS_MAKE_RULES)/prep.mk
-include $(WS_MAKE_RULES)/cmake.mk
-include $(WS_MAKE_RULES)/ips.mk
+include $(WS_MAKE_RULES)/common.mk
+
+CFLAGS += -pthread
+CXXFLAGS += -pthread
 
 COMPONENT_PRE_CMAKE_ACTION =        (cp -a $(SOURCE_DIR)/* $(@D))
 
-# Workaround for cmake to look for files in build directory
-$(BUILD_DIR)/%/.configured:     $(SOURCE_DIR)/.prep
-	($(RM) -rf $(@D) ; $(MKDIR) $(@D))
-	$(COMPONENT_PRE_CMAKE_ACTION)
-	(cd $(@D) ; $(ENV) $(CMAKE_ENV) \
-	        $(CMAKE) $(CMAKE_OPTIONS) $(@D))
-	$(COMPONENT_POST_CMAKE_ACTION)
-	$(TOUCH) $@
+POSTGRESQL_VERSIONS = 9.6 10 11 12
 
 CMAKE_OPTIONS = -D STATIC_BUILD=NO
 # Don't depend on host default pg_config
@@ -56,15 +52,16 @@ CMAKE_OPTIONS += -D CMAKE_INSTALL_RPATH_USE_LINK_PATH="TRUE"
 
 CMAKE_OPTIONS += -D CMAKE_INSTALL_PREFIX=/usr
 
-build: $(BUILD_32)
+COMPONENT_POST_INSTALL_ACTION += ( \
+			cd $(PROTO_DIR)/usr/postgres; \
+			for v in $(POSTGRESQL_VERSIONS); do \
+				$(CP) -r 9.5  $$v; \
+			done )
 
-install: $(INSTALL_32)
-
-test: $(NO_TESTS)
-
-REQUIRED_PACKAGES += database/postgres-94/library
-REQUIRED_PACKAGES += library/graphics/wxwidgets
-REQUIRED_PACKAGES += SUNWcs
-REQUIRED_PACKAGES += system/library
+# Auto-generated dependencies
 REQUIRED_PACKAGES += $(GXX_RUNTIME_PKG)
 REQUIRED_PACKAGES += $(GCC_RUNTIME_PKG)
+REQUIRED_PACKAGES += $(PG_LIBRARY_PKG)
+REQUIRED_PACKAGES += SUNWcs
+REQUIRED_PACKAGES += system/library
+REQUIRED_PACKAGES += system/library/boost
