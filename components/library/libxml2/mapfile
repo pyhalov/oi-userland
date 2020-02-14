@@ -38,12 +38,18 @@
 #
 $mapfile_version 2
 
+SYMBOL_VERSION ILLUMOS_0.3 {    
+    global:
+		# xmlAddNext patch
+        	xmlAddNext;
+} ILLUMOS_0.1;
+
 SYMBOL_VERSION ILLUMOS_0.2 {    
     global:
 		# LIBXML2_2.9.9
         	xmlHashDefaultDeallocator;
 } ILLUMOS_0.1;
- 
+
 SYMBOL_VERSION ILLUMOS_0.1 {    
     global:
 		# This symbol is needed by python lxml module
